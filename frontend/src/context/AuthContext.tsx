@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { v4 as uuidv4 } from 'uuid';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 export type UserRole = 'user' | 'hospital' | 'doctor';
 
@@ -10,20 +11,33 @@ export interface AuthUser {
   name: string;
   role: UserRole;
   phone?: string;
-  // Hospital specific
-  hospitalId?: string;
-  // Doctor specific
-  doctorId?: string;
-  // User specific
-  selectedCity?: string;
-  selectedArea?: string;
+  specialization?: string;
+  experience?: number;
+  consultation_fee?: number;
+  available_days?: string[];
+  available_slots?: string[];
+  rating?: number;
+  address?: string;
+  city?: string;
+  area?: string;
+  departments?: string[];
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
-  signup: (userData: Partial<AuthUser> & { password: string }) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (userData: {
+    email: string;
+    name: string;
+    password: string;
+    phone?: string;
+    role: UserRole;
+    specialization?: string;
+    experience?: number;
+    address?: string;
+    departments?: string[];
+  }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateUser: (data: Partial<AuthUser>) => Promise<void>;
 }
@@ -31,7 +45,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_KEY = '@medbook_auth';
-const USERS_KEY = '@medbook_users';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -45,7 +58,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const storedUser = await AsyncStorage.getItem(AUTH_KEY);
       if (storedUser) {
-        setUser(JSON.parse(storedUser));
+        const userData = JSON.parse(storedUser);
+        // Verify user still exists in backend
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/auth/user/${userData.id}`);
+          if (response.ok) {
+            const freshUser = await response.json();
+            setUser(freshUser);
+            await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(freshUser));
+          } else {
+            // User no longer exists in backend
+            await AsyncStorage.removeItem(AUTH_KEY);
+            setUser(null);
+          }
+        } catch {
+          // Network error - use cached user
+          setUser(userData);
+        }
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -54,76 +83,59 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const getStoredUsers = async (): Promise<AuthUser[]> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const users = await AsyncStorage.getItem(USERS_KEY);
-      return users ? JSON.parse(users) : [];
-    } catch {
-      return [];
-    }
-  };
+      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-  const saveUsers = async (users: AuthUser[]) => {
-    await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-  };
-
-  const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
-    try {
-      const users = await getStoredUsers();
-      const foundUser = users.find(u => u.email === email && u.role === role);
-      
-      if (foundUser) {
-        setUser(foundUser);
-        await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(foundUser));
-        return true;
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.detail || 'Login failed' };
       }
-      
-      // For demo: auto-create user if not found
-      const newUser: AuthUser = {
-        id: uuidv4(),
-        email,
-        name: email.split('@')[0],
-        role,
-      };
-      
-      const updatedUsers = [...users, newUser];
-      await saveUsers(updatedUsers);
-      setUser(newUser);
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
-      return true;
     } catch (error) {
       console.error('Login error:', error);
-      return false;
+      return { success: false, error: 'Network error. Please try again.' };
     }
   };
 
-  const signup = async (userData: Partial<AuthUser> & { password: string }): Promise<boolean> => {
+  const signup = async (userData: {
+    email: string;
+    name: string;
+    password: string;
+    phone?: string;
+    role: UserRole;
+    specialization?: string;
+    experience?: number;
+    address?: string;
+    departments?: string[];
+  }): Promise<{ success: boolean; error?: string }> => {
     try {
-      const users = await getStoredUsers();
-      const existingUser = users.find(u => u.email === userData.email);
-      
-      if (existingUser) {
-        return false; // User already exists
+      const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+
+      if (response.ok) {
+        const newUser = await response.json();
+        setUser(newUser);
+        await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.detail || 'Registration failed' };
       }
-
-      const newUser: AuthUser = {
-        id: uuidv4(),
-        email: userData.email!,
-        name: userData.name!,
-        role: userData.role!,
-        phone: userData.phone,
-        hospitalId: userData.hospitalId,
-        doctorId: userData.doctorId,
-      };
-
-      const updatedUsers = [...users, newUser];
-      await saveUsers(updatedUsers);
-      setUser(newUser);
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
-      return true;
     } catch (error) {
       console.error('Signup error:', error);
-      return false;
+      return { success: false, error: 'Network error. Please try again.' };
     }
   };
 
@@ -138,16 +150,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateUser = async (data: Partial<AuthUser>) => {
     if (!user) return;
-    
+
     try {
       const updatedUser = { ...user, ...data };
       setUser(updatedUser);
       await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(updatedUser));
-      
-      // Also update in users list
-      const users = await getStoredUsers();
-      const updatedUsers = users.map(u => u.id === user.id ? updatedUser : u);
-      await saveUsers(updatedUsers);
     } catch (error) {
       console.error('Update user error:', error);
     }

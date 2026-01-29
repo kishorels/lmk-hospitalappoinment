@@ -1,231 +1,210 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { v4 as uuidv4 } from 'uuid';
-import {
-  Hospital,
-  Doctor,
-  Appointment,
-  Query,
-  INITIAL_HOSPITALS,
-  INITIAL_DOCTORS,
-} from '../data/mockData';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+// Types
+export interface Hospital {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  area: string;
+  phone: string;
+  email: string;
+  departments: string[];
+  rating: number;
+  image_url?: string;
+}
+
+export interface Doctor {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  specialization: string;
+  experience: number;
+  hospital_id?: string;
+  hospital_name?: string;
+  rating: number;
+  consultation_fee: number;
+  available_days: string[];
+  available_slots: string[];
+  image_url?: string;
+}
+
+export interface Appointment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  doctor_id: string;
+  doctor_name: string;
+  hospital_id?: string;
+  hospital_name?: string;
+  date: string;
+  time_slot: string;
+  type: 'in-person' | 'video';
+  reason?: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'completed';
+  created_at: string;
+}
+
+// Disease Categories (static, for UI only)
+export const DISEASE_CATEGORIES = [
+  { id: '1', name: 'General', icon: 'medkit', specializations: ['General Physician'] },
+  { id: '2', name: 'Heart', icon: 'heart', specializations: ['Cardiologist'] },
+  { id: '3', name: 'Brain', icon: 'fitness', specializations: ['Neurologist'] },
+  { id: '4', name: 'Bones', icon: 'body', specializations: ['Orthopedic'] },
+  { id: '5', name: 'Skin', icon: 'hand-left', specializations: ['Dermatologist'] },
+  { id: '6', name: 'Eyes', icon: 'eye', specializations: ['Ophthalmologist'] },
+  { id: '7', name: 'Teeth', icon: 'happy', specializations: ['Dentist'] },
+  { id: '8', name: 'Kids', icon: 'people', specializations: ['Pediatrician'] },
+];
 
 interface DataContextType {
   hospitals: Hospital[];
   doctors: Doctor[];
   appointments: Appointment[];
-  queries: Query[];
   isLoading: boolean;
+  refreshData: () => Promise<void>;
   // Hospital actions
-  addHospital: (hospital: Omit<Hospital, 'id'>) => Promise<Hospital>;
-  updateHospital: (id: string, data: Partial<Hospital>) => Promise<void>;
-  // Doctor actions
-  addDoctor: (doctor: Omit<Doctor, 'id'>) => Promise<Doctor>;
-  updateDoctor: (id: string, data: Partial<Doctor>) => Promise<void>;
-  addDoctorToHospital: (doctorId: string, hospitalId: string) => Promise<void>;
-  removeDoctorFromHospital: (doctorId: string, hospitalId: string) => Promise<void>;
-  // Appointment actions
-  createAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt'>) => Promise<Appointment>;
-  updateAppointmentStatus: (id: string, status: Appointment['status']) => Promise<void>;
-  // Query actions
-  createQuery: (query: Omit<Query, 'id' | 'createdAt'>) => Promise<Query>;
-  replyToQuery: (id: string, reply: string) => Promise<void>;
-  // Getters
+  getHospitals: () => Promise<void>;
   getHospitalById: (id: string) => Hospital | undefined;
+  // Doctor actions
+  getDoctors: (specialization?: string) => Promise<void>;
   getDoctorById: (id: string) => Doctor | undefined;
-  getDoctorsByHospital: (hospitalId: string) => Doctor[];
-  getDoctorsBySpecialization: (specializations: string[]) => Doctor[];
-  getHospitalsByLocation: (city: string, area?: string) => Hospital[];
-  getAppointmentsByUser: (userId: string) => Appointment[];
-  getAppointmentsByDoctor: (doctorId: string) => Appointment[];
-  getQueriesByUser: (userId: string) => Query[];
-  getQueriesByDoctor: (doctorId: string) => Query[];
+  // Appointment actions
+  createAppointment: (data: Omit<Appointment, 'id' | 'created_at' | 'status'>) => Promise<Appointment | null>;
+  getUserAppointments: (userId: string) => Promise<void>;
+  getDoctorAppointments: (doctorId: string) => Promise<void>;
+  updateAppointmentStatus: (id: string, status: string) => Promise<boolean>;
+  // Search
   searchDoctors: (query: string) => Doctor[];
+  getDoctorsBySpecialization: (specializations: string[]) => Doctor[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
-
-const HOSPITALS_KEY = '@medbook_hospitals';
-const DOCTORS_KEY = '@medbook_doctors';
-const APPOINTMENTS_KEY = '@medbook_appointments';
-const QUERIES_KEY = '@medbook_queries';
-const INIT_KEY = '@medbook_initialized';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [queries, setQueries] = useState<Query[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    initializeData();
+    refreshData();
   }, []);
 
-  const initializeData = async () => {
+  const refreshData = async () => {
+    setIsLoading(true);
     try {
-      const initialized = await AsyncStorage.getItem(INIT_KEY);
-      
-      if (!initialized) {
-        // First time: load initial mock data
-        await AsyncStorage.setItem(HOSPITALS_KEY, JSON.stringify(INITIAL_HOSPITALS));
-        await AsyncStorage.setItem(DOCTORS_KEY, JSON.stringify(INITIAL_DOCTORS));
-        await AsyncStorage.setItem(APPOINTMENTS_KEY, JSON.stringify([]));
-        await AsyncStorage.setItem(QUERIES_KEY, JSON.stringify([]));
-        await AsyncStorage.setItem(INIT_KEY, 'true');
-        
-        setHospitals(INITIAL_HOSPITALS);
-        setDoctors(INITIAL_DOCTORS);
-        setAppointments([]);
-        setQueries([]);
-      } else {
-        // Load existing data
-        const [storedHospitals, storedDoctors, storedAppointments, storedQueries] = await Promise.all([
-          AsyncStorage.getItem(HOSPITALS_KEY),
-          AsyncStorage.getItem(DOCTORS_KEY),
-          AsyncStorage.getItem(APPOINTMENTS_KEY),
-          AsyncStorage.getItem(QUERIES_KEY),
-        ]);
-
-        setHospitals(storedHospitals ? JSON.parse(storedHospitals) : INITIAL_HOSPITALS);
-        setDoctors(storedDoctors ? JSON.parse(storedDoctors) : INITIAL_DOCTORS);
-        setAppointments(storedAppointments ? JSON.parse(storedAppointments) : []);
-        setQueries(storedQueries ? JSON.parse(storedQueries) : []);
-      }
+      await Promise.all([getHospitals(), getDoctors()]);
     } catch (error) {
-      console.error('Error initializing data:', error);
-      // Fallback to initial data
-      setHospitals(INITIAL_HOSPITALS);
-      setDoctors(INITIAL_DOCTORS);
+      console.error('Error refreshing data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Hospital actions
-  const addHospital = async (hospitalData: Omit<Hospital, 'id'>): Promise<Hospital> => {
-    const newHospital: Hospital = {
-      ...hospitalData,
-      id: uuidv4(),
-    };
-    const updatedHospitals = [...hospitals, newHospital];
-    setHospitals(updatedHospitals);
-    await AsyncStorage.setItem(HOSPITALS_KEY, JSON.stringify(updatedHospitals));
-    return newHospital;
-  };
-
-  const updateHospital = async (id: string, data: Partial<Hospital>) => {
-    const updatedHospitals = hospitals.map(h => h.id === id ? { ...h, ...data } : h);
-    setHospitals(updatedHospitals);
-    await AsyncStorage.setItem(HOSPITALS_KEY, JSON.stringify(updatedHospitals));
-  };
-
-  // Doctor actions
-  const addDoctor = async (doctorData: Omit<Doctor, 'id'>): Promise<Doctor> => {
-    const newDoctor: Doctor = {
-      ...doctorData,
-      id: uuidv4(),
-    };
-    const updatedDoctors = [...doctors, newDoctor];
-    setDoctors(updatedDoctors);
-    await AsyncStorage.setItem(DOCTORS_KEY, JSON.stringify(updatedDoctors));
-    return newDoctor;
-  };
-
-  const updateDoctor = async (id: string, data: Partial<Doctor>) => {
-    const updatedDoctors = doctors.map(d => d.id === id ? { ...d, ...data } : d);
-    setDoctors(updatedDoctors);
-    await AsyncStorage.setItem(DOCTORS_KEY, JSON.stringify(updatedDoctors));
-  };
-
-  const addDoctorToHospital = async (doctorId: string, hospitalId: string) => {
-    const doctor = doctors.find(d => d.id === doctorId);
-    if (doctor && !doctor.hospitalIds.includes(hospitalId)) {
-      await updateDoctor(doctorId, {
-        hospitalIds: [...doctor.hospitalIds, hospitalId],
-      });
+  const getHospitals = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/hospitals`);
+      if (response.ok) {
+        const data = await response.json();
+        setHospitals(data);
+      }
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
     }
   };
 
-  const removeDoctorFromHospital = async (doctorId: string, hospitalId: string) => {
-    const doctor = doctors.find(d => d.id === doctorId);
-    if (doctor) {
-      await updateDoctor(doctorId, {
-        hospitalIds: doctor.hospitalIds.filter(id => id !== hospitalId),
-      });
-    }
-  };
-
-  // Appointment actions
-  const createAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt'>): Promise<Appointment> => {
-    const newAppointment: Appointment = {
-      ...appointmentData,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    };
-    const updatedAppointments = [...appointments, newAppointment];
-    setAppointments(updatedAppointments);
-    await AsyncStorage.setItem(APPOINTMENTS_KEY, JSON.stringify(updatedAppointments));
-    return newAppointment;
-  };
-
-  const updateAppointmentStatus = async (id: string, status: Appointment['status']) => {
-    const updatedAppointments = appointments.map(a => a.id === id ? { ...a, status } : a);
-    setAppointments(updatedAppointments);
-    await AsyncStorage.setItem(APPOINTMENTS_KEY, JSON.stringify(updatedAppointments));
-  };
-
-  // Query actions
-  const createQuery = async (queryData: Omit<Query, 'id' | 'createdAt'>): Promise<Query> => {
-    const newQuery: Query = {
-      ...queryData,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    };
-    const updatedQueries = [...queries, newQuery];
-    setQueries(updatedQueries);
-    await AsyncStorage.setItem(QUERIES_KEY, JSON.stringify(updatedQueries));
-    return newQuery;
-  };
-
-  const replyToQuery = async (id: string, reply: string) => {
-    const updatedQueries = queries.map(q => 
-      q.id === id ? { ...q, reply, repliedAt: new Date().toISOString() } : q
-    );
-    setQueries(updatedQueries);
-    await AsyncStorage.setItem(QUERIES_KEY, JSON.stringify(updatedQueries));
-  };
-
-  // Getters
   const getHospitalById = (id: string) => hospitals.find(h => h.id === id);
+
+  const getDoctors = async (specialization?: string) => {
+    try {
+      const url = specialization
+        ? `${BACKEND_URL}/api/doctors?specialization=${encodeURIComponent(specialization)}`
+        : `${BACKEND_URL}/api/doctors`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setDoctors(data);
+      }
+    } catch (error) {
+      console.error('Error fetching doctors:', error);
+    }
+  };
+
   const getDoctorById = (id: string) => doctors.find(d => d.id === id);
-  
-  const getDoctorsByHospital = (hospitalId: string) => 
-    doctors.filter(d => d.hospitalIds.includes(hospitalId));
-  
-  const getDoctorsBySpecialization = (specializations: string[]) =>
-    doctors.filter(d => specializations.includes(d.specialization));
-  
-  const getHospitalsByLocation = (city: string, area?: string) =>
-    hospitals.filter(h => h.city === city && (!area || h.area === area));
-  
-  const getAppointmentsByUser = (userId: string) =>
-    appointments.filter(a => a.userId === userId);
-  
-  const getAppointmentsByDoctor = (doctorId: string) =>
-    appointments.filter(a => a.doctorId === doctorId);
-  
-  const getQueriesByUser = (userId: string) =>
-    queries.filter(q => q.userId === userId);
-  
-  const getQueriesByDoctor = (doctorId: string) =>
-    queries.filter(q => q.doctorId === doctorId);
+
+  const createAppointment = async (data: Omit<Appointment, 'id' | 'created_at' | 'status'>): Promise<Appointment | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        const newAppointment = await response.json();
+        setAppointments(prev => [...prev, newAppointment]);
+        return newAppointment;
+      }
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+    }
+    return null;
+  };
+
+  const getUserAppointments = async (userId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/user/${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAppointments(data);
+      }
+    } catch (error) {
+      console.error('Error fetching user appointments:', error);
+    }
+  };
+
+  const getDoctorAppointments = async (doctorId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/doctor/${doctorId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAppointments(data);
+      }
+    } catch (error) {
+      console.error('Error fetching doctor appointments:', error);
+    }
+  };
+
+  const updateAppointmentStatus = async (id: string, status: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/${id}/status?status=${status}`, {
+        method: 'PUT',
+      });
+      if (response.ok) {
+        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: status as any } : a));
+        return true;
+      }
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+    }
+    return false;
+  };
 
   const searchDoctors = (query: string) => {
     const lowerQuery = query.toLowerCase();
-    return doctors.filter(d => 
+    return doctors.filter(d =>
       d.name.toLowerCase().includes(lowerQuery) ||
       d.specialization.toLowerCase().includes(lowerQuery)
+    );
+  };
+
+  const getDoctorsBySpecialization = (specializations: string[]) => {
+    return doctors.filter(d =>
+      specializations.some(s => d.specialization.toLowerCase().includes(s.toLowerCase()))
     );
   };
 
@@ -234,28 +213,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hospitals,
       doctors,
       appointments,
-      queries,
       isLoading,
-      addHospital,
-      updateHospital,
-      addDoctor,
-      updateDoctor,
-      addDoctorToHospital,
-      removeDoctorFromHospital,
-      createAppointment,
-      updateAppointmentStatus,
-      createQuery,
-      replyToQuery,
+      refreshData,
+      getHospitals,
       getHospitalById,
+      getDoctors,
       getDoctorById,
-      getDoctorsByHospital,
-      getDoctorsBySpecialization,
-      getHospitalsByLocation,
-      getAppointmentsByUser,
-      getAppointmentsByDoctor,
-      getQueriesByUser,
-      getQueriesByDoctor,
+      createAppointment,
+      getUserAppointments,
+      getDoctorAppointments,
+      updateAppointmentStatus,
       searchDoctors,
+      getDoctorsBySpecialization,
     }}>
       {children}
     </DataContext.Provider>

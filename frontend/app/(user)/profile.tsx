@@ -9,7 +9,7 @@ import { colors } from '../../src/theme/colors';
 
 export default function Profile() {
   const router = useRouter();
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
     Alert.alert(
@@ -30,79 +30,68 @@ export default function Profile() {
   };
 
   const menuItems = [
-    { icon: 'person-outline', label: 'Edit Profile', onPress: () => {} },
-    { icon: 'notifications-outline', label: 'Notifications', onPress: () => {} },
-    { icon: 'location-outline', label: 'Change Location', onPress: () => router.push('/(user)/home') },
-    { icon: 'shield-checkmark-outline', label: 'Privacy Policy', onPress: () => {} },
-    { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => {} },
-    { icon: 'information-circle-outline', label: 'About', onPress: () => {} },
+    { icon: 'person-outline', label: 'Edit Profile', onPress: () => { } },
+    { icon: 'document-text-outline', label: 'Medical Records', onPress: () => router.push('/(user)/medical-records') },
+    { icon: 'calendar-outline', label: 'My Appointments', onPress: () => router.push('/(user)/appointments') },
+    { icon: 'notifications-outline', label: 'Notifications', onPress: () => { } },
+    { icon: 'shield-checkmark-outline', label: 'Privacy Policy', onPress: () => { } },
+    { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => { } },
+    { icon: 'information-circle-outline', label: 'About', onPress: () => { } },
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.title}>Account</Text>
         </View>
 
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Ionicons name="person" size={40} color={colors.primary} />
+            <Ionicons name="person-outline" size={40} color={colors.primary} />
           </View>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
-          {user?.selectedCity && (
-            <View style={styles.locationBadge}>
-              <Ionicons name="location" size={14} color={colors.primary} />
-              <Text style={styles.locationText}>
-                {user.selectedArea ? `${user.selectedArea}, ${user.selectedCity}` : user.selectedCity}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>0</Text>
-            <Text style={styles.statLabel}>Appointments</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>0</Text>
-            <Text style={styles.statLabel}>Queries</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>{user?.role?.toUpperCase()}</Text>
           </View>
         </View>
 
         {/* Menu Items */}
-        <Card style={styles.menuCard}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={item.label}
-              style={[
-                styles.menuItem,
-                index < menuItems.length - 1 && styles.menuItemBorder,
-              ]}
-              onPress={item.onPress}
-            >
-              <Ionicons name={item.icon as any} size={22} color={colors.textSecondary} />
-              <Text style={styles.menuItemText}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
-            </TouchableOpacity>
-          ))}
-        </Card>
+        <View style={styles.menuSection}>
+          <Text style={styles.sectionLabel}>Settings</Text>
+          <Card style={styles.menuCard}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[
+                  styles.menuItem,
+                  index < menuItems.length - 1 && styles.menuItemBorder,
+                ]}
+                onPress={item.onPress}
+              >
+                <View style={styles.menuIconContainer}>
+                  <Ionicons name={item.icon as any} size={22} color={colors.primary} />
+                </View>
+                <Text style={styles.menuItemText}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+              </TouchableOpacity>
+            ))}
+          </Card>
+        </View>
 
         {/* Logout Button */}
         <View style={styles.logoutSection}>
           <Button
-            title="Logout"
+            title="Sign Out"
             onPress={handleLogout}
             variant="danger"
             icon={<Ionicons name="log-out-outline" size={20} color="#FFF" />}
           />
         </View>
 
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={styles.version}>MedBook v2.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -120,7 +109,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: colors.text,
   },
   profileCard: {
@@ -129,13 +118,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 16,
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -151,71 +142,69 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 12,
   },
-  locationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primaryLight,
+  roleBadge: {
+    backgroundColor: colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  locationText: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '500',
+  roleText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
   },
-  statsContainer: {
-    flexDirection: 'row',
+  menuSection: {
+    marginTop: 24,
     paddingHorizontal: 20,
-    marginTop: 20,
-    gap: 12,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 28,
+  sectionLabel: {
+    fontSize: 14,
     fontWeight: '700',
-    color: colors.primary,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 4,
+    color: colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+    marginLeft: 4,
   },
   menuCard: {
-    marginHorizontal: 20,
-    marginTop: 20,
+    padding: 0,
+    overflow: 'hidden',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 16,
+    paddingHorizontal: 16,
     gap: 16,
   },
   menuItemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  menuIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '08',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   menuItemText: {
     flex: 1,
     fontSize: 16,
+    fontWeight: '500',
     color: colors.text,
   },
   logoutSection: {
     paddingHorizontal: 20,
-    marginTop: 24,
+    marginTop: 32,
   },
   version: {
     textAlign: 'center',
     fontSize: 13,
     color: colors.textLight,
-    marginTop: 24,
-    marginBottom: 32,
+    marginTop: 32,
+    marginBottom: 40,
   },
 });

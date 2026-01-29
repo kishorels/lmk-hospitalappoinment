@@ -1,34 +1,32 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useData } from '../../src/context/DataContext';
+import { useData, Doctor, DISEASE_CATEGORIES } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { Doctor, DISEASE_CATEGORIES, SPECIALIZATIONS } from '../../src/data/mockData';
+
+// Common specializations for filtering if no category is selected
+const COMMON_SPECS = [
+  'General Physician', 'Cardiologist', 'Dermatologist',
+  'Pediatrician', 'Orthopedic', 'Neurologist', 'Dentist'
+];
 
 export default function Doctors() {
   const router = useRouter();
-  const { categoryId } = useLocalSearchParams<{ categoryId?: string }>();
-  const { doctors, getDoctorsBySpecialization, getHospitalById } = useData();
+  const { specialization: urlSpec } = useLocalSearchParams<{ specialization?: string }>();
+  const { doctors, isLoading, searchDoctors } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSpec, setSelectedSpec] = useState<string | null>(null);
-
-  const category = categoryId ? DISEASE_CATEGORIES.find(c => c.id === categoryId) : null;
+  const [selectedSpec, setSelectedSpec] = useState<string | null>(urlSpec || null);
 
   const filteredDoctors = useMemo(() => {
     let result = doctors;
 
-    // Filter by category specializations
-    if (category) {
-      result = getDoctorsBySpecialization(category.specializations);
-    }
-
-    // Filter by selected specialization
+    // Filter by selected specialization (from URL or chip)
     if (selectedSpec) {
-      result = result.filter(d => d.specialization === selectedSpec);
+      result = result.filter(d => d.specialization.toLowerCase().includes(selectedSpec.toLowerCase()));
     }
 
     // Filter by search query
@@ -41,83 +39,67 @@ export default function Doctors() {
     }
 
     return result;
-  }, [doctors, category, selectedSpec, searchQuery]);
-
-  const availableSpecs = category
-    ? category.specializations
-    : SPECIALIZATIONS;
+  }, [doctors, selectedSpec, searchQuery]);
 
   const renderDoctor = ({ item }: { item: Doctor }) => {
-    const hospitals = item.hospitalIds.map(id => getHospitalById(id)).filter(Boolean);
-    
     return (
       <Card
-        onPress={() => router.push(`/(user)/doctor/${item.id}`)}
+        onPress={() => router.push(`/(user)/booking?doctorId=${item.id}`)}
         style={styles.doctorCard}
         elevation="medium"
       >
         <View style={styles.doctorHeader}>
           <View style={styles.doctorAvatar}>
-            <Ionicons name="person" size={32} color={colors.doctorPrimary} />
+            <Ionicons name="person" size={32} color={colors.primary} />
           </View>
           <View style={styles.doctorInfo}>
             <Text style={styles.doctorName}>{item.name}</Text>
             <Text style={styles.doctorSpec}>{item.specialization}</Text>
             <View style={styles.metaRow}>
               <Ionicons name="star" size={14} color="#FFB800" />
-              <Text style={styles.metaText}>{item.rating.toFixed(1)}</Text>
+              <Text style={styles.metaText}>{item.rating?.toFixed(1) || '4.0'}</Text>
               <Text style={styles.metaDot}>•</Text>
               <Text style={styles.metaText}>{item.experience} yrs exp</Text>
             </View>
           </View>
-          {item.videoConsultation && (
-            <Badge text="Video" variant="info" />
-          )}
         </View>
 
-        <View style={styles.hospitalList}>
-          <Text style={styles.hospitalLabel}>Works at:</Text>
-          <View style={styles.hospitalChips}>
-            {hospitals.slice(0, 2).map((hospital) => (
-              <View key={hospital!.id} style={styles.hospitalChip}>
-                <Ionicons name="business" size={12} color={colors.hospitalPrimary} />
-                <Text style={styles.hospitalChipText}>{hospital!.name}</Text>
-              </View>
-            ))}
-            {hospitals.length > 2 && (
-              <Text style={styles.moreHospitals}>+{hospitals.length - 2} more</Text>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.footer}>
+        <View style={styles.doctorFooter}>
           <View style={styles.feeContainer}>
             <Text style={styles.feeLabel}>Consultation</Text>
-            <Text style={styles.feeValue}>₹{item.consultationFee}</Text>
+            <Text style={styles.feeValue}>₹{item.consultation_fee}</Text>
           </View>
           <TouchableOpacity
             style={styles.bookBtn}
             onPress={() => router.push({
               pathname: '/(user)/booking',
-              params: { doctorId: item.id, hospitalId: item.hospitalIds[0] }
+              params: { doctorId: item.id }
             })}
           >
-            <Text style={styles.bookBtnText}>Book Now</Text>
+            <Text style={styles.bookBtnText}>Book Appointment</Text>
           </TouchableOpacity>
         </View>
       </Card>
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>
-          {category ? category.name : 'All Doctors'}
+          {selectedSpec ? selectedSpec : 'All Doctors'}
         </Text>
         <View style={{ width: 44 }} />
       </View>
@@ -139,43 +121,25 @@ export default function Doctors() {
         )}
       </View>
 
-      {/* Specialization Filters */}
-      <View style={styles.filtersContainer}>
-        <TouchableOpacity
-          style={[
-            styles.filterChip,
-            !selectedSpec && styles.filterChipActive,
-          ]}
-          onPress={() => setSelectedSpec(null)}
-        >
-          <Text
-            style={[
-              styles.filterChipText,
-              !selectedSpec && styles.filterChipTextActive,
-            ]}
-          >
-            All
-          </Text>
-        </TouchableOpacity>
-        {availableSpecs.map((spec) => (
+      {/* Specialization Filter Scroll */}
+      <View style={styles.specsWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.specsScroll}>
           <TouchableOpacity
-            key={spec}
-            style={[
-              styles.filterChip,
-              selectedSpec === spec && styles.filterChipActive,
-            ]}
-            onPress={() => setSelectedSpec(selectedSpec === spec ? null : spec)}
+            style={[styles.specChip, !selectedSpec && styles.specChipActive]}
+            onPress={() => setSelectedSpec(null)}
           >
-            <Text
-              style={[
-                styles.filterChipText,
-                selectedSpec === spec && styles.filterChipTextActive,
-              ]}
-            >
-              {spec}
-            </Text>
+            <Text style={[styles.specText, !selectedSpec && styles.specTextActive]}>All</Text>
           </TouchableOpacity>
-        ))}
+          {COMMON_SPECS.map((spec) => (
+            <TouchableOpacity
+              key={spec}
+              style={[styles.specChip, selectedSpec === spec && styles.specChipActive]}
+              onPress={() => setSelectedSpec(spec)}
+            >
+              <Text style={[styles.specText, selectedSpec === spec && styles.specTextActive]}>{spec}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Doctors List */}
@@ -189,9 +153,9 @@ export default function Doctors() {
         />
       ) : (
         <View style={styles.emptyState}>
-          <Ionicons name="search" size={64} color={colors.textLight} />
+          <Ionicons name="medkit-outline" size={64} color={colors.textLight} />
           <Text style={styles.emptyTitle}>No doctors found</Text>
-          <Text style={styles.emptyText}>Try adjusting your filters</Text>
+          <Text style={styles.emptyText}>Try adjusting your search or filters</Text>
         </View>
       )}
     </SafeAreaView>
@@ -202,6 +166,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -227,8 +196,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginHorizontal: 20,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    gap: 12,
+    borderRadius: 16,
+    marginTop: 8,
   },
   searchInput: {
     flex: 1,
@@ -236,49 +205,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  filtersContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 8,
+  specsWrapper: {
+    marginTop: 16,
   },
-  filterChip: {
-    paddingHorizontal: 14,
+  specsScroll: {
+    paddingHorizontal: 20,
+    gap: 10,
+    paddingBottom: 4,
+  },
+  specChip: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  filterChipActive: {
+  specChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  filterChipText: {
-    fontSize: 13,
+  specText: {
+    fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
   },
-  filterChipTextActive: {
+  specTextActive: {
     color: '#FFF',
   },
   listContent: {
     padding: 20,
-    paddingTop: 4,
+    paddingTop: 12,
   },
   doctorCard: {
     marginBottom: 16,
+    padding: 16,
   },
   doctorHeader: {
     flexDirection: 'row',
     marginBottom: 16,
   },
   doctorAvatar: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     borderRadius: 16,
-    backgroundColor: colors.doctorPrimary + '15',
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -288,7 +259,7 @@ const styles = StyleSheet.create({
   },
   doctorName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
     marginBottom: 4,
   },
@@ -308,41 +279,8 @@ const styles = StyleSheet.create({
   },
   metaDot: {
     color: colors.textLight,
-    marginHorizontal: 4,
   },
-  hospitalList: {
-    marginBottom: 16,
-  },
-  hospitalLabel: {
-    fontSize: 12,
-    color: colors.textLight,
-    marginBottom: 8,
-  },
-  hospitalChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-  },
-  hospitalChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.hospitalPrimary + '10',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 4,
-  },
-  hospitalChipText: {
-    fontSize: 12,
-    color: colors.hospitalPrimary,
-    fontWeight: '500',
-  },
-  moreHospitals: {
-    fontSize: 12,
-    color: colors.textLight,
-  },
-  footer: {
+  doctorFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -362,12 +300,12 @@ const styles = StyleSheet.create({
   },
   bookBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
   },
   bookBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#FFF',
   },
@@ -376,10 +314,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
+    marginTop: 60,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.text,
     marginTop: 16,
   },
@@ -387,5 +326,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 8,
+    textAlign: 'center',
   },
 });

@@ -1,26 +1,37 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useData } from '../../../src/context/DataContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useData, Doctor } from '../../../src/context/DataContext';
 import { Card, Badge, Button } from '../../../src/components';
 import { colors } from '../../../src/theme/colors';
-import { Doctor } from '../../../src/data/mockData';
 
 export default function HospitalDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getHospitalById, getDoctorsByHospital } = useData();
+  const { getHospitalById, doctors, isLoading } = useData();
 
-  const hospital = getHospitalById(id);
-  const doctors = getDoctorsByHospital(id);
+  const hospital = useMemo(() => getHospitalById(id || ''), [id, isLoading]);
+
+  const hospitalDoctors = useMemo(() => {
+    return doctors.filter(d => d.hospital_id === id);
+  }, [id, doctors]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   if (!hospital) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorState}>
-          <Ionicons name="alert-circle" size={64} color={colors.error} />
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
           <Text style={styles.errorText}>Hospital not found</Text>
           <Button title="Go Back" onPress={() => router.back()} variant="outline" />
         </View>
@@ -31,12 +42,12 @@ export default function HospitalDetail() {
   const renderDoctorCard = (doctor: Doctor) => (
     <Card
       key={doctor.id}
-      onPress={() => router.push(`/(user)/doctor/${doctor.id}`)}
+      onPress={() => router.push(`/(user)/booking?doctorId=${doctor.id}`)}
       style={styles.doctorCard}
     >
       <View style={styles.doctorRow}>
         <View style={styles.doctorAvatar}>
-          <Ionicons name="person" size={28} color={colors.doctorPrimary} />
+          <Ionicons name="person-outline" size={28} color={colors.primary} />
         </View>
         <View style={styles.doctorInfo}>
           <Text style={styles.doctorName}>{doctor.name}</Text>
@@ -44,105 +55,100 @@ export default function HospitalDetail() {
           <View style={styles.doctorMeta}>
             <View style={styles.metaItem}>
               <Ionicons name="star" size={14} color="#FFB800" />
-              <Text style={styles.metaText}>{doctor.rating.toFixed(1)}</Text>
+              <Text style={styles.metaText}>{doctor.rating?.toFixed(1) || '4.0'}</Text>
             </View>
             <View style={styles.metaItem}>
-              <Ionicons name="ribbon" size={14} color={colors.textLight} />
-              <Text style={styles.metaText}>{doctor.experience} yrs</Text>
+              <Ionicons name="time-outline" size={14} color={colors.textLight} />
+              <Text style={styles.metaText}>{doctor.experience} yrs exp</Text>
             </View>
-            {doctor.videoConsultation && (
-              <Badge text="Video" variant="info" />
-            )}
           </View>
         </View>
-      </View>
-      <View style={styles.doctorActions}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => router.push({
-            pathname: '/(user)/booking',
-            params: { doctorId: doctor.id, hospitalId: hospital.id }
-          })}
-        >
-          <Ionicons name="calendar" size={18} color={colors.primary} />
-          <Text style={styles.actionBtnText}>Book</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.queryBtn]}
-          onPress={() => router.push(`/(user)/chat/${doctor.id}`)}
-        >
-          <Ionicons name="chatbubble" size={18} color={colors.secondary} />
-          <Text style={[styles.actionBtnText, { color: colors.secondary }]}>Query</Text>
-        </TouchableOpacity>
+        <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
       </View>
     </Card>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Hospital Details</Text>
+          <Text style={styles.headerTitle}>Details</Text>
           <View style={{ width: 44 }} />
         </View>
 
-        {/* Hospital Info */}
-        <View style={styles.hospitalSection}>
-          <View style={styles.hospitalIcon}>
-            <Ionicons name="business" size={48} color={colors.hospitalPrimary} />
+        {/* Hospital Profile */}
+        <View style={styles.profileSection}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="business-outline" size={60} color={colors.primary} />
           </View>
           <Text style={styles.hospitalName}>{hospital.name}</Text>
-          
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={16} color="#FFB800" />
-            <Text style={styles.ratingText}>{hospital.rating.toFixed(1)}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="location" size={20} color={colors.primary} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoText}>{hospital.address}</Text>
-              <Text style={styles.infoSubtext}>{hospital.area}, {hospital.city}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="call" size={20} color={colors.primary} />
-            <Text style={styles.infoText}>{hospital.contact}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="mail" size={20} color={colors.primary} />
-            <Text style={styles.infoText}>{hospital.email}</Text>
+          <View style={styles.locationBadge}>
+            <Ionicons name="location-outline" size={14} color={colors.primary} />
+            <Text style={styles.locationText}>{hospital.area}, {hospital.city}</Text>
           </View>
         </View>
 
-        {/* Departments */}
-        <View style={styles.sectionContainer}>
+        {/* Details Grid */}
+        <View style={styles.detailsGrid}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Departments</Text>
+            <Text style={styles.detailValue}>{hospital.departments.length}</Text>
+          </View>
+          <View style={styles.detailDivider} />
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Rating</Text>
+            <Text style={styles.detailValue}>{hospital.rating?.toFixed(1) || '4.0'}</Text>
+          </View>
+        </View>
+
+        {/* Contact Info */}
+        <Card style={styles.contactCard}>
+          <View style={styles.contactRow}>
+            <View style={styles.contactIcon}>
+              <Ionicons name="call-outline" size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.contactText}>{hospital.phone || 'Contact Private'}</Text>
+          </View>
+          <View style={[styles.contactRow, { marginTop: 16 }]}>
+            <View style={styles.contactIcon}>
+              <Ionicons name="mail-outline" size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.contactText}>{hospital.email}</Text>
+          </View>
+          <View style={[styles.contactRow, { marginTop: 16, alignItems: 'flex-start' }]}>
+            <View style={styles.contactIcon}>
+              <Ionicons name="map-outline" size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.contactText}>{hospital.address}</Text>
+          </View>
+        </Card>
+
+        {/* Departments List */}
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Departments</Text>
-          <View style={styles.departmentsGrid}>
+          <View style={styles.deptsContainer}>
             {hospital.departments.map((dept, index) => (
-              <View key={index} style={styles.deptCard}>
-                <Ionicons name="medical" size={20} color={colors.primary} />
-                <Text style={styles.deptName}>{dept}</Text>
+              <View key={index} style={styles.deptChip}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
+                <Text style={styles.deptText}>{dept}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Doctors */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Doctors ({doctors.length})</Text>
-          {doctors.length > 0 ? (
-            doctors.map(renderDoctorCard)
+        {/* Medical Staff */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Medical Staff ({hospitalDoctors.length})</Text>
+          {hospitalDoctors.length > 0 ? (
+            hospitalDoctors.map(renderDoctorCard)
           ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No doctors available</Text>
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={40} color={colors.textLight} />
+              <Text style={styles.emptyText}>No doctors currently listed at this facility</Text>
             </View>
           )}
         </View>
@@ -156,6 +162,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -166,74 +177,108 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 44,
     height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
   },
-  hospitalSection: {
+  profileSection: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: 20,
+    paddingBottom: 32,
   },
-  hospitalIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
-    backgroundColor: colors.hospitalPrimary + '15',
+  iconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  hospitalName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF8E1',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
     marginBottom: 20,
   },
-  ratingText: {
+  hospitalName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 6,
+    backgroundColor: colors.primary + '08',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  locationText: {
     fontSize: 14,
+    color: colors.primary,
     fontWeight: '600',
+  },
+  detailsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    marginHorizontal: 20,
+    paddingVertical: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.text,
   },
-  infoRow: {
+  detailDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.border,
+  },
+  contactCard: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 20,
+  },
+  contactRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 12,
+    alignItems: 'center',
+    gap: 16,
   },
-  infoContent: {
+  contactIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primary + '08',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactText: {
     flex: 1,
-  },
-  infoText: {
     fontSize: 15,
     color: colors.text,
+    lineHeight: 22,
   },
-  infoSubtext: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  sectionContainer: {
-    padding: 20,
+  section: {
+    marginTop: 32,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
     fontSize: 18,
@@ -241,23 +286,25 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  departmentsGrid: {
+  deptsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
-  deptCard: {
+  deptChip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: 8,
   },
-  deptName: {
+  deptText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.text,
   },
   doctorCard: {
@@ -265,13 +312,13 @@ const styles = StyleSheet.create({
   },
   doctorRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    alignItems: 'center',
   },
   doctorAvatar: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     borderRadius: 16,
-    backgroundColor: colors.doctorPrimary + '15',
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -281,19 +328,19 @@ const styles = StyleSheet.create({
   },
   doctorName: {
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 4,
   },
   doctorSpec: {
     fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 8,
+    marginVertical: 2,
   },
   doctorMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 2,
   },
   metaItem: {
     flexDirection: 'row',
@@ -301,38 +348,22 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
   },
-  doctorActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
+  emptyCard: {
+    backgroundColor: colors.surface,
+    padding: 32,
+    borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
-  },
-  queryBtn: {
-    backgroundColor: colors.secondaryLight,
-  },
-  actionBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
   },
   emptyText: {
     fontSize: 14,
     color: colors.textSecondary,
+    textAlign: 'center',
     marginTop: 12,
   },
   errorState: {

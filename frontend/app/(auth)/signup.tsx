@@ -3,17 +3,31 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, UserRole } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
 import { Button, Input } from '../../src/components';
-import { colors } from '../../src/theme/colors';
-import { SPECIALIZATIONS, DAYS_OF_WEEK } from '../../src/data/mockData';
+import { colors, gradients } from '../../src/theme/colors';
+
+// Specializations list
+const SPECIALIZATIONS = [
+  'General Physician',
+  'Cardiologist',
+  'Dermatologist',
+  'Pediatrician',
+  'Orthopedic',
+  'Neurologist',
+  'ENT Specialist',
+  'Ophthalmologist',
+  'Dentist',
+  'Gynecologist',
+  'Psychiatrist',
+  'Urologist',
+];
 
 export default function Signup() {
   const router = useRouter();
   const params = useLocalSearchParams<{ role?: string }>();
   const { signup } = useAuth();
-  const { addHospital, addDoctor } = useData();
 
   const role = (params.role as UserRole) || 'user';
 
@@ -25,17 +39,12 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // Hospital fields
-  const [hospitalName, setHospitalName] = useState('');
   const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [area, setArea] = useState('');
   const [departments, setDepartments] = useState('');
 
   // Doctor fields
   const [specialization, setSpecialization] = useState('');
   const [experience, setExperience] = useState('');
-  const [consultationFee, setConsultationFee] = useState('');
-  const [videoConsultation, setVideoConsultation] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -43,7 +52,6 @@ export default function Signup() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Common validations
     if (!name) newErrors.name = 'Name is required';
     if (!email) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
@@ -52,14 +60,10 @@ export default function Signup() {
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     if (password !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
-    // Hospital validations
     if (role === 'hospital') {
-      if (!hospitalName) newErrors.hospitalName = 'Hospital name is required';
       if (!address) newErrors.address = 'Address is required';
-      if (!city) newErrors.city = 'City is required';
     }
 
-    // Doctor validations
     if (role === 'doctor') {
       if (!specialization) newErrors.specialization = 'Specialization is required';
     }
@@ -73,66 +77,22 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      let hospitalId: string | undefined;
-      let doctorId: string | undefined;
-
-      // Create hospital record if hospital role
-      if (role === 'hospital') {
-        const hospital = await addHospital({
-          name: hospitalName,
-          address,
-          city,
-          area,
-          departments: departments.split(',').map(d => d.trim()),
-          rating: 4.0,
-          image: 'hospital',
-          contact: phone,
-          email,
-        });
-        hospitalId = hospital.id;
-      }
-
-      // Create doctor record if doctor role
-      if (role === 'doctor') {
-        const doctor = await addDoctor({
-          name,
-          email,
-          specialization,
-          hospitalIds: [],
-          availableDays: DAYS_OF_WEEK.slice(0, 5),
-          videoConsultation,
-          image: 'person',
-          experience: parseInt(experience) || 0,
-          rating: 4.0,
-          consultationFee: parseInt(consultationFee) || 500,
-        });
-        doctorId = doctor.id;
-      }
-
-      const success = await signup({
+      const result = await signup({
         name,
         email,
-        phone,
         password,
+        phone,
         role,
-        hospitalId,
-        doctorId,
+        specialization: role === 'doctor' ? specialization : undefined,
+        experience: role === 'doctor' ? parseInt(experience) || 0 : undefined,
+        address: role === 'hospital' ? address : undefined,
+        departments: role === 'hospital' ? departments.split(',').map(d => d.trim()) : undefined,
       });
 
-      if (success) {
-        switch (role) {
-          case 'user':
-            router.replace('/(user)/home');
-            break;
-          case 'hospital':
-            router.replace('/(hospital)/dashboard');
-            break;
-          case 'doctor':
-            router.replace('/(doctor)/dashboard');
-            break;
-        }
+      if (result.success) {
+        router.replace('/');
       } else {
-        Alert.alert('Signup Failed', 'This email is already registered.');
+        Alert.alert('Signup Failed', result.error || 'Registration failed. Please try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -157,34 +117,48 @@ export default function Signup() {
     }
   };
 
+  const getRoleIcon = (): keyof typeof Ionicons.glyphMap => {
+    switch (role) {
+      case 'user': return 'person';
+      case 'hospital': return 'business';
+      case 'doctor': return 'medkit';
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={[getRoleColor(), getRoleColor() + 'CC']}
+        style={styles.headerGradient}
+      >
+        <SafeAreaView edges={['top']}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <View style={styles.roleIconContainer}>
+              <Ionicons name={getRoleIcon()} size={32} color="#FFF" />
+            </View>
+            <Text style={styles.title}>Create {getRoleTitle()} Account</Text>
+            <Text style={styles.subtitle}>Fill in your details to get started</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-
-          <View style={styles.header}>
-            <View style={[styles.roleIndicator, { backgroundColor: getRoleColor() + '20' }]}>
-              <Text style={[styles.roleText, { color: getRoleColor() }]}>{getRoleTitle()}</Text>
-            </View>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Fill in your details to get started</Text>
-          </View>
-
           <View style={styles.form}>
             <Input
               label="Full Name"
               placeholder="Enter your name"
               value={name}
               onChangeText={setName}
-              icon="person"
               error={errors.name}
               autoCapitalize="words"
+              leftIcon={<Ionicons name="person-outline" size={20} color={colors.textSecondary} />}
             />
             <Input
               label="Email"
@@ -192,8 +166,9 @@ export default function Signup() {
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
-              icon="mail"
+              autoCapitalize="none"
               error={errors.email}
+              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
             />
             <Input
               label="Phone Number"
@@ -201,54 +176,28 @@ export default function Signup() {
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
-              icon="call"
               error={errors.phone}
+              leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
             />
 
             {/* Hospital specific fields */}
             {role === 'hospital' && (
               <>
                 <Input
-                  label="Hospital Name"
-                  placeholder="Enter hospital name"
-                  value={hospitalName}
-                  onChangeText={setHospitalName}
-                  icon="business"
-                  error={errors.hospitalName}
-                  autoCapitalize="words"
-                />
-                <Input
-                  label="Address"
+                  label="Hospital Address"
                   placeholder="Enter full address"
                   value={address}
                   onChangeText={setAddress}
-                  icon="location"
                   error={errors.address}
                   multiline
-                />
-                <Input
-                  label="City"
-                  placeholder="Enter city"
-                  value={city}
-                  onChangeText={setCity}
-                  icon="map"
-                  error={errors.city}
-                  autoCapitalize="words"
-                />
-                <Input
-                  label="Area"
-                  placeholder="Enter area/locality"
-                  value={area}
-                  onChangeText={setArea}
-                  icon="navigate"
-                  autoCapitalize="words"
+                  leftIcon={<Ionicons name="location-outline" size={20} color={colors.textSecondary} />}
                 />
                 <Input
                   label="Departments"
                   placeholder="e.g., Cardiology, Orthopedics"
                   value={departments}
                   onChangeText={setDepartments}
-                  icon="list"
+                  leftIcon={<Ionicons name="list-outline" size={20} color={colors.textSecondary} />}
                 />
               </>
             )}
@@ -287,27 +236,8 @@ export default function Signup() {
                   value={experience}
                   onChangeText={setExperience}
                   keyboardType="numeric"
-                  icon="ribbon"
+                  leftIcon={<Ionicons name="ribbon-outline" size={20} color={colors.textSecondary} />}
                 />
-                <Input
-                  label="Consultation Fee (₹)"
-                  placeholder="Enter fee"
-                  value={consultationFee}
-                  onChangeText={setConsultationFee}
-                  keyboardType="numeric"
-                  icon="cash"
-                />
-                <TouchableOpacity
-                  style={styles.videoToggle}
-                  onPress={() => setVideoConsultation(!videoConsultation)}
-                >
-                  <Ionicons
-                    name={videoConsultation ? 'checkbox' : 'square-outline'}
-                    size={24}
-                    color={videoConsultation ? getRoleColor() : colors.textLight}
-                  />
-                  <Text style={styles.videoToggleText}>Available for Video Consultations</Text>
-                </TouchableOpacity>
               </>
             )}
 
@@ -317,8 +247,8 @@ export default function Signup() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              icon="lock-closed"
               error={errors.password}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
             />
             <Input
               label="Confirm Password"
@@ -326,28 +256,28 @@ export default function Signup() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
-              icon="lock-closed"
               error={errors.confirmPassword}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
             />
-          </View>
 
-          <Button
-            title="Create Account"
-            onPress={handleSignup}
-            loading={loading}
-            size="large"
-            style={[styles.signupButton, { backgroundColor: getRoleColor() }]}
-          />
+            <Button
+              title={loading ? 'Creating Account...' : 'Create Account'}
+              onPress={handleSignup}
+              disabled={loading}
+              size="large"
+              style={[styles.signupButton, { backgroundColor: getRoleColor() }]}
+            />
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => router.push({ pathname: '/(auth)/login', params: { role } })}>
-              <Text style={[styles.footerLink, { color: getRoleColor() }]}>Sign In</Text>
-            </TouchableOpacity>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+                <Text style={[styles.footerLink, { color: getRoleColor() }]}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -356,48 +286,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  headerGradient: {
+    paddingBottom: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+    marginTop: 8,
+  },
+  headerContent: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  roleIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 6,
+  },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginTop: 8,
-  },
-  header: {
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  roleIndicator: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 16,
-  },
-  roleText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
+    padding: 24,
   },
   form: {
-    marginBottom: 24,
+    gap: 12,
   },
   fieldLabel: {
     fontSize: 14,
@@ -406,7 +342,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   specializationContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   specializationScroll: {
     marginBottom: 4,
@@ -429,22 +365,13 @@ const styles = StyleSheet.create({
     color: colors.error,
     marginTop: 4,
   },
-  videoToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
-  videoToggleText: {
-    fontSize: 16,
-    color: colors.text,
-  },
   signupButton: {
-    marginBottom: 24,
+    marginTop: 16,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginTop: 20,
   },
   footerText: {
     fontSize: 14,

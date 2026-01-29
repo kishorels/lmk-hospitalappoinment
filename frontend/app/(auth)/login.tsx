@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, UserRole } from '../../src/context/AuthContext';
 import { Button, Input } from '../../src/components';
-import { colors } from '../../src/theme/colors';
+import { colors, gradients } from '../../src/theme/colors';
 
 export default function Login() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function Login() {
     else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Invalid email format';
     if (!password) newErrors.password = 'Password is required';
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -34,21 +35,12 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const success = await login(email, password, selectedRole);
-      if (success) {
-        switch (selectedRole) {
-          case 'user':
-            router.replace('/(user)/home');
-            break;
-          case 'hospital':
-            router.replace('/(hospital)/dashboard');
-            break;
-          case 'doctor':
-            router.replace('/(doctor)/dashboard');
-            break;
-        }
+      const result = await login(email, password);
+      if (result.success) {
+        // Router will auto-redirect based on role in index.tsx
+        router.replace('/');
       } else {
-        Alert.alert('Login Failed', 'Invalid credentials. Please try again.');
+        Alert.alert('Login Failed', result.error || 'Invalid credentials. Please try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -74,89 +66,76 @@ export default function Login() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={gradients.primary as [string, string]}
+        style={styles.headerGradient}
+      >
+        <SafeAreaView edges={['top']}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Ionicons name="log-in-outline" size={48} color="#FFF" />
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to continue to MedBook</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>Sign in to continue</Text>
-          </View>
-
-          <View style={styles.roleSelector}>
-            <Text style={styles.roleLabel}>Login as:</Text>
-            <View style={styles.roleTabs}>
-              {(['user', 'hospital', 'doctor'] as UserRole[]).map((role) => (
-                <TouchableOpacity
-                  key={role}
-                  style={[
-                    styles.roleTab,
-                    selectedRole === role && { backgroundColor: getRoleColor(role) + '20', borderColor: getRoleColor(role) },
-                  ]}
-                  onPress={() => setSelectedRole(role)}
-                >
-                  <Ionicons
-                    name={getRoleIcon(role)}
-                    size={20}
-                    color={selectedRole === role ? getRoleColor(role) : colors.textLight}
-                  />
-                  <Text
-                    style={[
-                      styles.roleTabText,
-                      selectedRole === role && { color: getRoleColor(role) },
-                    ]}
-                  >
-                    {role.charAt(0).toUpperCase() + role.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
           <View style={styles.form}>
             <Input
               label="Email"
-              placeholder="Enter your email"
               value={email}
               onChangeText={setEmail}
+              placeholder="Enter your email"
               keyboardType="email-address"
-              icon="mail"
+              autoCapitalize="none"
               error={errors.email}
+              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
             />
+
             <Input
               label="Password"
-              placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
+              placeholder="Enter your password"
               secureTextEntry
-              icon="lock-closed"
               error={errors.password}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
             />
-          </View>
 
-          <Button
-            title="Sign In"
-            onPress={handleLogin}
-            loading={loading}
-            size="large"
-            style={[styles.loginButton, { backgroundColor: getRoleColor(selectedRole) }]}
-          />
+            <Button
+              title={loading ? 'Signing in...' : 'Sign In'}
+              onPress={handleLogin}
+              disabled={loading}
+              size="large"
+              style={styles.loginButton}
+            />
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push({ pathname: '/(auth)/signup', params: { role: selectedRole } })}>
-              <Text style={[styles.footerLink, { color: getRoleColor(selectedRole) }]}>Sign Up</Text>
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.signupLink}
+              onPress={() => router.push('/(auth)/signup')}
+            >
+              <Text style={styles.signupText}>
+                Don't have an account? <Text style={styles.signupTextBold}>Sign Up</Text>
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -165,80 +144,75 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  headerGradient: {
+    paddingBottom: 32,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+    marginTop: 8,
+  },
+  headerContent: {
+    alignItems: 'center',
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFF',
+    marginTop: 16,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 8,
+  },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginTop: 8,
-  },
-  header: {
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  roleSelector: {
-    marginBottom: 24,
-  },
-  roleLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  roleTabs: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  roleTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  roleTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textLight,
+    padding: 24,
   },
   form: {
-    marginBottom: 24,
+    gap: 16,
   },
   loginButton: {
-    marginBottom: 24,
+    marginTop: 8,
   },
-  footer: {
+  divider: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 24,
   },
-  footerText: {
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    color: colors.textSecondary,
     fontSize: 14,
+  },
+  signupLink: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  signupText: {
+    fontSize: 15,
     color: colors.textSecondary,
   },
-  footerLink: {
-    fontSize: 14,
+  signupTextBold: {
+    color: colors.primary,
     fontWeight: '600',
   },
 });

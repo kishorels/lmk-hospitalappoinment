@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle, StyleProp } from 'react-native';
 
 interface ButtonProps {
   title: string;
@@ -8,7 +8,7 @@ interface ButtonProps {
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   textStyle?: TextStyle;
   icon?: React.ReactNode;
 }

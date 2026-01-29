@@ -13,8 +13,8 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(user)" />
-          <Stack.Screen name="(hospital)" />
           <Stack.Screen name="(doctor)" />
+          <Stack.Screen name="(hospital)" />
         </Stack>
       </DataProvider>
     </AuthProvider>

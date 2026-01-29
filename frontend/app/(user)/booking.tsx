@@ -1,35 +1,49 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { format, addDays, isBefore, startOfDay } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, Doctor } from '../../src/context/DataContext';
 import { Button } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { TIME_SLOTS } from '../../src/data/mockData';
+
+const { width } = Dimensions.get('window');
 
 export default function Booking() {
   const router = useRouter();
-  const { doctorId, hospitalId } = useLocalSearchParams<{ doctorId: string; hospitalId: string }>();
+  const { doctorId } = useLocalSearchParams<{ doctorId: string }>();
   const { user } = useAuth();
-  const { getDoctorById, getHospitalById, createAppointment } = useData();
+  const { getDoctorById, createAppointment, isLoading: dataLoading } = useData();
 
-  const doctor = getDoctorById(doctorId);
-  const hospital = getHospitalById(hospitalId);
-
-  const [appointmentType, setAppointmentType] = useState<'hospital' | 'video'>('hospital');
+  const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [appointmentType, setAppointmentType] = useState<'in-person' | 'video'>('in-person');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
 
-  if (!doctor || !hospital) {
+  useEffect(() => {
+    if (doctorId) {
+      const d = getDoctorById(doctorId);
+      if (d) setDoctor(d);
+    }
+  }, [doctorId, dataLoading]);
+
+  if (dataLoading && !doctor) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!doctor) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorState}>
-          <Ionicons name="alert-circle" size={64} color={colors.error} />
-          <Text style={styles.errorText}>Invalid booking details</Text>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
+          <Text style={styles.errorText}>Doctor not found</Text>
           <Button title="Go Back" onPress={() => router.back()} variant="outline" />
         </View>
       </SafeAreaView>
@@ -38,11 +52,11 @@ export default function Booking() {
 
   // Generate next 14 days
   const dates = Array.from({ length: 14 }, (_, i) => addDays(new Date(), i));
-  
+
   // Filter dates by doctor availability
   const availableDates = dates.filter(date => {
     const dayName = format(date, 'EEEE');
-    return doctor.availableDays.includes(dayName);
+    return doctor.available_days.includes(dayName);
   });
 
   const handleBook = async () => {
@@ -51,103 +65,91 @@ export default function Booking() {
       return;
     }
 
-    setLoading(true);
+    setBookingLoading(true);
     try {
-      await createAppointment({
-        userId: user.id,
-        doctorId: doctor.id,
-        hospitalId: hospital.id,
+      const appointment = await createAppointment({
+        user_id: user.id,
+        user_name: user.name,
+        doctor_id: doctor.id,
+        doctor_name: doctor.name,
+        hospital_id: doctor.hospital_id,
+        hospital_name: doctor.hospital_name,
+        date: selectedDate.toISOString().split('T')[0],
+        time_slot: selectedTime,
         type: appointmentType,
-        date: selectedDate.toISOString(),
-        timeSlot: selectedTime,
-        status: 'pending',
+        reason: 'General Consultation',
       });
-      
-      Alert.alert(
-        'Appointment Booked!',
-        `Your ${appointmentType === 'video' ? 'video consultation' : 'appointment'} with ${doctor.name} is pending confirmation.`,
-        [{ text: 'OK', onPress: () => router.replace('/(user)/appointments') }]
-      );
+
+      if (appointment) {
+        Alert.alert(
+          'Booking Successful',
+          `Your appointment with ${doctor.name} has been scheduled for ${format(selectedDate, 'MMM d')} at ${selectedTime}.`,
+          [{ text: 'View Appointments', onPress: () => router.replace('/(user)/appointments') }]
+        );
+      } else {
+        throw new Error('Booking failed');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to book appointment. Please try again.');
+      Alert.alert('Booking Error', 'Failed to book appointment. Please try again.');
     } finally {
-      setLoading(false);
+      setBookingLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Book Appointment</Text>
+          <Text style={styles.headerTitle}>Select Schedule</Text>
           <View style={{ width: 44 }} />
         </View>
 
-        {/* Doctor Info */}
+        {/* Doctor Minimal Info */}
         <View style={styles.doctorCard}>
           <View style={styles.doctorAvatar}>
-            <Ionicons name="person" size={32} color={colors.doctorPrimary} />
+            <Ionicons name="person" size={32} color={colors.primary} />
           </View>
-          <View style={styles.doctorInfo}>
+          <View style={styles.doctorDetails}>
             <Text style={styles.doctorName}>{doctor.name}</Text>
             <Text style={styles.doctorSpec}>{doctor.specialization}</Text>
-            <View style={styles.hospitalRow}>
-              <Ionicons name="business" size={14} color={colors.hospitalPrimary} />
-              <Text style={styles.hospitalName}>{hospital.name}</Text>
-            </View>
+            {doctor.hospital_name && (
+              <View style={styles.hospitalRow}>
+                <Ionicons name="business-outline" size={14} color={colors.textSecondary} />
+                <Text style={styles.hospitalName}>{doctor.hospital_name}</Text>
+              </View>
+            )}
           </View>
         </View>
 
         {/* Appointment Type */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appointment Type</Text>
-          <View style={styles.typeContainer}>
+          <Text style={styles.sectionTitle}>Consultation Type</Text>
+          <View style={styles.typeGrid}>
             <TouchableOpacity
-              style={[
-                styles.typeCard,
-                appointmentType === 'hospital' && styles.typeCardActive,
-              ]}
-              onPress={() => setAppointmentType('hospital')}
+              style={[styles.typeCard, appointmentType === 'in-person' && styles.typeCardActive]}
+              onPress={() => setAppointmentType('in-person')}
             >
-              <View style={[styles.typeIcon, appointmentType === 'hospital' && styles.typeIconActive]}>
-                <Ionicons name="business" size={24} color={appointmentType === 'hospital' ? '#FFF' : colors.primary} />
-              </View>
-              <Text style={[styles.typeText, appointmentType === 'hospital' && styles.typeTextActive]}>
-                Hospital Visit
-              </Text>
-              <Text style={styles.typeDesc}>In-person consultation</Text>
+              <Ionicons
+                name="business"
+                size={24}
+                color={appointmentType === 'in-person' ? colors.primary : colors.textSecondary}
+              />
+              <Text style={[styles.typeText, appointmentType === 'in-person' && styles.typeTextActive]}>In-Person</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={[
-                styles.typeCard,
-                appointmentType === 'video' && styles.typeCardActive,
-                !doctor.videoConsultation && styles.typeCardDisabled,
-              ]}
-              onPress={() => doctor.videoConsultation && setAppointmentType('video')}
-              disabled={!doctor.videoConsultation}
+              style={[styles.typeCard, appointmentType === 'video' && styles.typeCardActive]}
+              onPress={() => setAppointmentType('video')}
             >
-              <View style={[styles.typeIcon, appointmentType === 'video' && styles.typeIconActive]}>
-                <Ionicons
-                  name="videocam"
-                  size={24}
-                  color={appointmentType === 'video' ? '#FFF' : doctor.videoConsultation ? colors.primary : colors.textLight}
-                />
-              </View>
-              <Text style={[
-                styles.typeText,
-                appointmentType === 'video' && styles.typeTextActive,
-                !doctor.videoConsultation && styles.typeTextDisabled,
-              ]}>
-                Video Call
-              </Text>
-              <Text style={styles.typeDesc}>
-                {doctor.videoConsultation ? 'Online consultation' : 'Not available'}
-              </Text>
+              <Ionicons
+                name="videocam"
+                size={24}
+                color={appointmentType === 'video' ? colors.primary : colors.textSecondary}
+              />
+              <Text style={[styles.typeText, appointmentType === 'video' && styles.typeTextActive]}>Video Call</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -155,30 +157,21 @@ export default function Booking() {
         {/* Date Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Select Date</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.datesScroll}>
             {availableDates.map((date) => {
-              const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
+              const dateStr = format(date, 'yyyy-MM-dd');
+              const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr;
               return (
                 <TouchableOpacity
-                  key={date.toISOString()}
-                  style={[
-                    styles.dateCard,
-                    isSelected && styles.dateCardActive,
-                  ]}
+                  key={dateStr}
+                  style={[styles.dateCard, isSelected && styles.dateCardActive]}
                   onPress={() => {
                     setSelectedDate(date);
                     setSelectedTime(null);
                   }}
                 >
-                  <Text style={[styles.dateDay, isSelected && styles.dateDayActive]}>
-                    {format(date, 'EEE')}
-                  </Text>
-                  <Text style={[styles.dateNum, isSelected && styles.dateNumActive]}>
-                    {format(date, 'd')}
-                  </Text>
-                  <Text style={[styles.dateMonth, isSelected && styles.dateMonthActive]}>
-                    {format(date, 'MMM')}
-                  </Text>
+                  <Text style={[styles.dateDay, isSelected && styles.dateDayActive]}>{format(date, 'EEE')}</Text>
+                  <Text style={[styles.dateNum, isSelected && styles.dateNumActive]}>{format(date, 'd')}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -188,22 +181,17 @@ export default function Booking() {
         {/* Time Selection */}
         {selectedDate && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Time</Text>
+            <Text style={styles.sectionTitle}>Select Time Slot</Text>
             <View style={styles.timeGrid}>
-              {TIME_SLOTS.map((time) => {
+              {doctor.available_slots.map((time) => {
                 const isSelected = selectedTime === time;
                 return (
                   <TouchableOpacity
                     key={time}
-                    style={[
-                      styles.timeSlot,
-                      isSelected && styles.timeSlotActive,
-                    ]}
+                    style={[styles.timeCard, isSelected && styles.timeCardActive]}
                     onPress={() => setSelectedTime(time)}
                   >
-                    <Text style={[styles.timeText, isSelected && styles.timeTextActive]}>
-                      {time}
-                    </Text>
+                    <Text style={[styles.timeText, isSelected && styles.timeTextActive]}>{time}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -211,42 +199,33 @@ export default function Booking() {
           </View>
         )}
 
-        {/* Summary */}
+        {/* Summary Card */}
         {selectedDate && selectedTime && (
           <View style={styles.summarySection}>
-            <Text style={styles.sectionTitle}>Appointment Summary</Text>
             <View style={styles.summaryCard}>
-              <View style={styles.summaryRow}>
-                <Ionicons name="calendar" size={20} color={colors.primary} />
-                <Text style={styles.summaryText}>
-                  {format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Ionicons name="time" size={20} color={colors.primary} />
-                <Text style={styles.summaryText}>{selectedTime}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Ionicons name={appointmentType === 'video' ? 'videocam' : 'business'} size={20} color={colors.primary} />
-                <Text style={styles.summaryText}>
-                  {appointmentType === 'video' ? 'Video Consultation' : `At ${hospital.name}`}
-                </Text>
-              </View>
-              <View style={styles.feeRow}>
-                <Text style={styles.feeLabel}>Consultation Fee</Text>
-                <Text style={styles.feeValue}>₹{doctor.consultationFee}</Text>
+              <View style={styles.summaryInfo}>
+                <View style={styles.summaryRow}>
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                  <Text style={styles.summaryText}>{format(selectedDate, 'MMMM d, yyyy')}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Ionicons name="time-outline" size={18} color={colors.primary} />
+                  <Text style={styles.summaryText}>{selectedTime}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Ionicons name="card-outline" size={18} color={colors.primary} />
+                  <Text style={styles.summaryText}>Fee: ₹{doctor.consultation_fee}</Text>
+                </View>
               </View>
             </View>
           </View>
         )}
 
-        {/* Book Button */}
-        <View style={styles.bookSection}>
+        <View style={styles.footer}>
           <Button
-            title="Confirm Booking"
+            title={bookingLoading ? 'Confirming...' : 'Confirm Appointment'}
             onPress={handleBook}
-            loading={loading}
-            disabled={!selectedDate || !selectedTime}
+            disabled={!selectedDate || !selectedTime || bookingLoading}
             size="large"
           />
         </View>
@@ -259,6 +238,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -275,52 +259,53 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
   },
   doctorCard: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
     marginHorizontal: 20,
+    marginTop: 8,
     padding: 16,
     borderRadius: 16,
-    marginBottom: 16,
+    alignItems: 'center',
   },
   doctorAvatar: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     borderRadius: 16,
-    backgroundColor: colors.doctorPrimary + '15',
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  doctorInfo: {
+  doctorDetails: {
     flex: 1,
   },
   doctorName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 4,
   },
   doctorSpec: {
     fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 8,
+    marginVertical: 2,
   },
   hospitalRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    marginTop: 2,
   },
   hospitalName: {
     fontSize: 13,
-    color: colors.hospitalPrimary,
+    color: colors.textSecondary,
   },
   section: {
+    marginTop: 24,
     paddingHorizontal: 20,
-    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 16,
@@ -328,61 +313,42 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  typeContainer: {
+  typeGrid: {
     flexDirection: 'row',
     gap: 12,
   },
   typeCard: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 16,
     padding: 16,
+    borderRadius: 16,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
+    gap: 8,
   },
   typeCardActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
-  },
-  typeCardDisabled: {
-    opacity: 0.5,
-  },
-  typeIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  typeIconActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary + '05',
   },
   typeText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
+    color: colors.textSecondary,
   },
   typeTextActive: {
     color: colors.primary,
   },
-  typeTextDisabled: {
-    color: colors.textLight,
-  },
-  typeDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  datesScroll: {
+    gap: 12,
   },
   dateCard: {
-    width: 72,
+    width: 64,
+    height: 80,
     backgroundColor: colors.surface,
     borderRadius: 16,
-    padding: 12,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -392,93 +358,72 @@ const styles = StyleSheet.create({
   },
   dateDay: {
     fontSize: 12,
-    fontWeight: '500',
     color: colors.textSecondary,
+    marginBottom: 4,
   },
   dateDayActive: {
     color: 'rgba(255,255,255,0.8)',
   },
   dateNum: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
-    marginVertical: 4,
   },
   dateNumActive: {
     color: '#FFF',
-  },
-  dateMonth: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  dateMonthActive: {
-    color: 'rgba(255,255,255,0.8)',
   },
   timeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  timeSlot: {
-    paddingHorizontal: 16,
+  timeCard: {
+    width: (width - 60) / 3,
     paddingVertical: 12,
     backgroundColor: colors.surface,
-    borderRadius: 10,
+    borderRadius: 12,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
-  timeSlotActive: {
+  timeCardActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   timeText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.text,
   },
   timeTextActive: {
     color: '#FFF',
   },
   summarySection: {
+    marginTop: 24,
     paddingHorizontal: 20,
-    marginBottom: 24,
   },
   summaryCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
+    backgroundColor: colors.primary + '10',
     padding: 20,
+    borderRadius: 20,
+  },
+  summaryInfo: {
+    gap: 12,
   },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
   },
   summaryText: {
     fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
   },
-  feeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: 4,
-  },
-  feeLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  feeValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  bookSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
+  footer: {
+    padding: 20,
+    paddingBottom: 40,
+    marginTop: 8,
   },
   errorState: {
     flex: 1,
@@ -488,6 +433,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
+    fontWeight: '600',
     color: colors.text,
   },
 });

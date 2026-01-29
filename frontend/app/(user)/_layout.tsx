@@ -43,11 +43,11 @@ export default function UserLayout() {
         }}
       />
       <Tabs.Screen
-        name="diseases"
+        name="ai-assistant"
         options={{
-          title: 'Diseases',
+          title: 'AI Health',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medical" size={size} color={color} />
+            <Ionicons name="sparkles" size={size} color={color} />
           ),
         }}
       />
@@ -67,6 +67,12 @@ export default function UserLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="diseases"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -95,6 +101,18 @@ export default function UserLayout() {
       />
       <Tabs.Screen
         name="doctors"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="medical-records"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-chat"
         options={{
           href: null,
         }}

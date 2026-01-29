@@ -1,176 +1,149 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, DISEASE_CATEGORIES } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
-import { colors } from '../../src/theme/colors';
-import { CITIES, AREAS, DISEASE_CATEGORIES } from '../../src/data/mockData';
+import { colors, gradients } from '../../src/theme/colors';
+
+const { width } = Dimensions.get('window');
 
 export default function UserHome() {
   const router = useRouter();
-  const { user, updateUser } = useAuth();
-  const { doctors, getHospitalsByLocation, getAppointmentsByUser } = useData();
+  const { user } = useAuth();
+  const { doctors, hospitals, appointments, isLoading, refreshData, getUserAppointments, searchDoctors } = useData();
 
-  const [showLocationPicker, setShowLocationPicker] = useState(!user?.selectedCity);
-  const [selectedCity, setSelectedCity] = useState(user?.selectedCity || '');
-  const [selectedArea, setSelectedArea] = useState(user?.selectedArea || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [location, setLocation] = useState<{ city: string; area: string } | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(true);
 
-  const nearbyHospitals = getHospitalsByLocation(selectedCity, selectedArea);
-  const upcomingAppointments = user ? getAppointmentsByUser(user.id).filter(a => a.status === 'accepted' || a.status === 'pending') : [];
+  useEffect(() => {
+    getLocation();
+    if (user) {
+      getUserAppointments(user.id);
+    }
+  }, [user]);
 
-  const filteredDoctors = searchQuery
-    ? doctors.filter(d => 
-        d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        d.specialization.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : [];
+  const getLocation = async () => {
+    try {
+      setLoadingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+        return;
+      }
 
-  const handleLocationSave = async () => {
-    if (selectedCity) {
-      await updateUser({ selectedCity, selectedArea });
-      setShowLocationPicker(false);
+      const loc = await Location.getCurrentPositionAsync({});
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      if (place) {
+        setLocation({
+          city: place.city || place.district || 'Kanyakumari',
+          area: place.subregion || place.name || 'Nagercoil',
+        });
+      } else {
+        setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+      }
+    } catch (error) {
+      console.error('Location error:', error);
+      setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+    } finally {
+      setLoadingLocation(false);
     }
   };
 
-  const onRefresh = () => {
+  const filteredDoctors = searchQuery ? searchDoctors(searchQuery) : [];
+  const upcomingAppointments = appointments.filter(a => a.status === 'accepted' || a.status === 'pending');
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await refreshData();
+    if (user) {
+      await getUserAppointments(user.id);
+    }
+    setRefreshing(false);
   };
 
-  if (showLocationPicker) {
+  if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.locationPicker}>
-          <Ionicons name="location" size={64} color={colors.primary} />
-          <Text style={styles.locationTitle}>Select Your Location</Text>
-          <Text style={styles.locationSubtitle}>Find hospitals and doctors near you</Text>
-
-          <View style={styles.pickerSection}>
-            <Text style={styles.pickerLabel}>City</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cityScroll}>
-              {CITIES.map((city) => (
-                <TouchableOpacity
-                  key={city}
-                  style={[
-                    styles.cityChip,
-                    selectedCity === city && styles.cityChipSelected,
-                  ]}
-                  onPress={() => {
-                    setSelectedCity(city);
-                    setSelectedArea('');
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.cityChipText,
-                      selectedCity === city && styles.cityChipTextSelected,
-                    ]}
-                  >
-                    {city}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {selectedCity && (
-            <View style={styles.pickerSection}>
-              <Text style={styles.pickerLabel}>Area (Optional)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.areaScroll}>
-                {AREAS[selectedCity]?.map((area) => (
-                  <TouchableOpacity
-                    key={area}
-                    style={[
-                      styles.areaChip,
-                      selectedArea === area && styles.areaChipSelected,
-                    ]}
-                    onPress={() => setSelectedArea(area)}
-                  >
-                    <Text
-                      style={[
-                        styles.areaChipText,
-                        selectedArea === area && styles.areaChipTextSelected,
-                      ]}
-                    >
-                      {area}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.continueButton, !selectedCity && styles.continueButtonDisabled]}
-            onPress={handleLocationSave}
-            disabled={!selectedCity}
-          >
-            <Text style={styles.continueButtonText}>Continue</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFF" />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Hello, {user?.name || 'User'}</Text>
-            <TouchableOpacity
-              style={styles.locationRow}
-              onPress={() => setShowLocationPicker(true)}
-            >
-              <Ionicons name="location" size={16} color={colors.primary} />
-              <Text style={styles.locationText}>
-                {selectedArea ? `${selectedArea}, ${selectedCity}` : selectedCity}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={colors.textLight} />
+        {/* Gradient Header */}
+        <LinearGradient
+          colors={gradients.primary as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.greetingSmall}>Welcome back,</Text>
+              <View style={styles.greetingRow}>
+                <Text style={styles.greeting}>{user?.name || 'User'}</Text>
+                <Ionicons name="hand-right" size={22} color="#FFF" style={styles.waveIcon} />
+              </View>
+              <TouchableOpacity style={styles.locationRow} onPress={getLocation}>
+                <Ionicons name="location" size={14} color="rgba(255,255,255,0.9)" />
+                {loadingLocation ? (
+                  <Text style={styles.locationText}>Getting location...</Text>
+                ) : (
+                  <Text style={styles.locationText}>{location?.area}, {location?.city}</Text>
+                )}
+                <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.notificationBtn}>
+              <Ionicons name="notifications-outline" size={22} color="#FFF" />
+              {upcomingAppointments.length > 0 && <View style={styles.notificationBadge} />}
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.notificationBtn}>
-            <Ionicons name="notifications-outline" size={24} color={colors.text} />
-            <View style={styles.notificationBadge} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={colors.textLight} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search doctors, specializations..."
-            placeholderTextColor={colors.textLight}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.textLight} />
-            </TouchableOpacity>
-          )}
-        </View>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color={colors.textLight} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search doctors, specializations..."
+              placeholderTextColor={colors.textLight}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={colors.textLight} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </LinearGradient>
 
         {/* Search Results */}
         {searchQuery && filteredDoctors.length > 0 && (
-          <View style={styles.searchResults}>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Search Results</Text>
             {filteredDoctors.slice(0, 5).map((doctor) => (
               <Card
                 key={doctor.id}
-                onPress={() => router.push(`/(user)/doctor/${doctor.id}`)}
+                onPress={() => router.push(`/(user)/booking?doctorId=${doctor.id}`)}
                 style={styles.searchResultCard}
               >
                 <View style={styles.searchResultRow}>
@@ -208,6 +181,7 @@ export default function UserHome() {
                   variant="info"
                 />
               </View>
+              <Text style={styles.appointmentDoctor}>{upcomingAppointments[0].doctor_name}</Text>
               <Text style={styles.appointmentDate}>
                 {new Date(upcomingAppointments[0].date).toLocaleDateString('en-US', {
                   weekday: 'long',
@@ -215,33 +189,142 @@ export default function UserHome() {
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.appointmentTime}>{upcomingAppointments[0].timeSlot}</Text>
+              <Text style={styles.appointmentTime}>{upcomingAppointments[0].time_slot}</Text>
             </Card>
           </View>
         )}
 
+        {/* Services Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Our Services</Text>
+          <View style={styles.servicesGrid}>
+            <TouchableOpacity
+              style={styles.serviceCard}
+              onPress={() => router.push('/(user)/hospitals')}
+            >
+              <LinearGradient
+                colors={['#EEF6FF', '#DBEAFE']}
+                style={styles.serviceIconBg}
+              >
+                <Ionicons name="business" size={28} color={colors.primary} />
+              </LinearGradient>
+              <Text style={styles.serviceTitle}>Hospitals</Text>
+              <Text style={styles.serviceCount}>{hospitals.length} available</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.serviceCard}
+              onPress={() => router.push('/(user)/doctors')}
+            >
+              <LinearGradient
+                colors={['#E0FFF4', '#CCFBF1']}
+                style={styles.serviceIconBg}
+              >
+                <Ionicons name="medkit" size={28} color={colors.secondary} />
+              </LinearGradient>
+              <Text style={styles.serviceTitle}>Doctors</Text>
+              <Text style={styles.serviceCount}>{doctors.length} available</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.serviceCard}
+              onPress={() => router.push('/(user)/ai-assistant')}
+            >
+              <LinearGradient
+                colors={['#F3E8FF', '#E9D5FF']}
+                style={styles.serviceIconBg}
+              >
+                <Ionicons name="sparkles" size={28} color="#8B5CF6" />
+              </LinearGradient>
+              <Text style={styles.serviceTitle}>AI Health</Text>
+              <Text style={styles.serviceCount}>Ask anything</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.serviceCard}
+              onPress={() => router.push('/(user)/appointments')}
+            >
+              <LinearGradient
+                colors={['#FFF7ED', '#FFEDD5']}
+                style={styles.serviceIconBg}
+              >
+                <Ionicons name="calendar" size={28} color={colors.accent} />
+              </LinearGradient>
+              <Text style={styles.serviceTitle}>My Bookings</Text>
+              <Text style={styles.serviceCount}>{appointments.length} total</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Disease Categories */}
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Find by Specialty</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
+            {DISEASE_CATEGORIES.map((category, index) => {
+              const iconColors = [colors.primary, colors.secondary, '#8B5CF6', colors.accent, '#EC4899', '#06B6D4', '#10B981', '#F59E0B'];
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  style={styles.categoryChip}
+                  onPress={() => router.push({ pathname: '/(user)/doctors', params: { specialization: category.name } })}
+                >
+                  <View style={[styles.categoryIcon, { backgroundColor: iconColors[index % iconColors.length] + '15' }]}>
+                    <Ionicons name={category.icon as any} size={22} color={iconColors[index % iconColors.length]} />
+                  </View>
+                  <Text style={styles.categoryName}>{category.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Available Doctors */}
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Find by Health Issue</Text>
-            <TouchableOpacity onPress={() => router.push('/(user)/diseases')}>
+            <Text style={styles.sectionTitle}>Top Doctors</Text>
+            <TouchableOpacity onPress={() => router.push('/(user)/doctors')}>
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {DISEASE_CATEGORIES.slice(0, 5).map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => router.push({ pathname: '/(user)/doctors', params: { categoryId: category.id } })}
+          {doctors.length > 0 ? (
+            doctors.slice(0, 3).map((doctor) => (
+              <Card
+                key={doctor.id}
+                onPress={() => router.push(`/(user)/booking?doctorId=${doctor.id}`)}
+                style={styles.doctorCard}
               >
-                <View style={styles.categoryIcon}>
-                  <Ionicons name={category.icon as any} size={28} color={colors.primary} />
+                <View style={styles.doctorRow}>
+                  <View style={styles.doctorAvatarLarge}>
+                    <Ionicons name="person" size={28} color={colors.primary} />
+                  </View>
+                  <View style={styles.doctorDetails}>
+                    <Text style={styles.doctorNameLarge}>{doctor.name}</Text>
+                    <Text style={styles.doctorSpecLarge}>{doctor.specialization}</Text>
+                    <View style={styles.doctorMeta}>
+                      <View style={styles.metaItem}>
+                        <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+                        <Text style={styles.metaText}>{doctor.experience} yrs</Text>
+                      </View>
+                      <View style={styles.metaItem}>
+                        <Ionicons name="star" size={12} color="#FFB800" />
+                        <Text style={styles.metaText}>{doctor.rating.toFixed(1)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.doctorFee}>
+                    <Text style={styles.feeAmount}>₹{doctor.consultation_fee}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                  </View>
                 </View>
-                <Text style={styles.categoryName}>{category.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+              </Card>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="medkit-outline" size={48} color={colors.textLight} />
+              <Text style={styles.emptyText}>No doctors available yet</Text>
+              <Text style={styles.emptySubtext}>Doctors will appear here once they register</Text>
+            </View>
+          )}
         </View>
 
         {/* Nearby Hospitals */}
@@ -252,11 +335,11 @@ export default function UserHome() {
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-          {nearbyHospitals.length > 0 ? (
-            nearbyHospitals.slice(0, 3).map((hospital) => (
+          {hospitals.length > 0 ? (
+            hospitals.slice(0, 2).map((hospital) => (
               <Card
                 key={hospital.id}
-                onPress={() => router.push(`/(user)/hospital/${hospital.id}`)}
+                onPress={() => router.push(`/(user)/hospitals?id=${hospital.id}`)}
                 style={styles.hospitalCard}
               >
                 <View style={styles.hospitalRow}>
@@ -265,7 +348,10 @@ export default function UserHome() {
                   </View>
                   <View style={styles.hospitalInfo}>
                     <Text style={styles.hospitalName}>{hospital.name}</Text>
-                    <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
+                    <View style={styles.hospitalMeta}>
+                      <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
+                      <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
+                    </View>
                     <View style={styles.ratingRow}>
                       <Ionicons name="star" size={14} color="#FFB800" />
                       <Text style={styles.ratingText}>{hospital.rating.toFixed(1)}</Text>
@@ -279,10 +365,7 @@ export default function UserHome() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="business-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No hospitals found in your area</Text>
-              <TouchableOpacity onPress={() => setShowLocationPicker(true)}>
-                <Text style={styles.changeLocation}>Change Location</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyText}>No hospitals registered yet</Text>
             </View>
           )}
         </View>
@@ -296,36 +379,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  scrollContent: {
-    paddingBottom: 24,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
   },
-  header: {
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  headerGradient: {
+    paddingTop: 16,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  greetingSmall: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  greetingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
   greeting: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  waveIcon: {
+    marginLeft: 8,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
   },
   locationText: {
-    fontSize: 14,
-    color: colors.textSecondary,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.95)',
+    fontWeight: '500',
   },
   notificationBtn: {
     width: 44,
     height: 44,
-    backgroundColor: colors.surface,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
@@ -337,34 +453,21 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.error,
+    backgroundColor: '#FF4757',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: 20,
-    marginTop: 16,
+    backgroundColor: '#FFF',
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 12,
   },
   searchInput: {
     flex: 1,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
-  },
-  searchResults: {
-    paddingHorizontal: 20,
-    marginTop: 16,
-  },
-  searchResultCard: {
-    marginBottom: 8,
-  },
-  searchResultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   section: {
     marginTop: 24,
@@ -386,73 +489,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  categoryCard: {
-    width: 100,
-    alignItems: 'center',
-    marginRight: 12,
-    backgroundColor: colors.surface,
-    padding: 16,
-    borderRadius: 16,
+  searchResultCard: {
+    marginBottom: 8,
   },
-  categoryIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  categoryName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  hospitalCard: {
-    marginBottom: 12,
-  },
-  hospitalRow: {
+  searchResultRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  hospitalIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: colors.hospitalPrimary + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  hospitalInfo: {
-    flex: 1,
-  },
-  hospitalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  hospitalAddress: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 6,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  deptText: {
-    fontSize: 12,
-    color: colors.textLight,
-    marginLeft: 8,
   },
   doctorAvatar: {
     width: 48,
@@ -474,133 +516,205 @@ const styles = StyleSheet.create({
   doctorSpec: {
     fontSize: 13,
     color: colors.textSecondary,
+    marginTop: 2,
   },
   appointmentCard: {
-    backgroundColor: colors.primaryLight,
+    padding: 16,
   },
   appointmentHeader: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 12,
   },
+  appointmentDoctor: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
   appointmentDate: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  appointmentTime: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  servicesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  serviceCard: {
+    width: (width - 52) / 2,
+    backgroundColor: colors.surface,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  serviceIconBg: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  serviceTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  serviceCount: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  categoriesScroll: {
+    marginTop: 12,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    marginRight: 10,
+    gap: 8,
+  },
+  categoryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  doctorCard: {
+    marginBottom: 12,
+  },
+  doctorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  doctorAvatarLarge: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  doctorDetails: {
+    flex: 1,
+  },
+  doctorNameLarge: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
-  appointmentTime: {
-    fontSize: 14,
+  doctorSpecLarge: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  doctorMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  doctorFee: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  feeAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  hospitalCard: {
+    marginBottom: 12,
+  },
+  hospitalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hospitalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.hospitalPrimary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  hospitalInfo: {
+    flex: 1,
+  },
+  hospitalName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  hospitalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  hospitalAddress: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  ratingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  deptText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: 8,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 32,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
   },
   emptyText: {
-    fontSize: 14,
-    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
     marginTop: 12,
   },
-  changeLocation: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  // Location Picker Styles
-  locationPicker: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  locationTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  locationSubtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 32,
-  },
-  pickerSection: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  pickerLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  cityScroll: {
-    flexDirection: 'row',
-  },
-  cityChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    backgroundColor: colors.surface,
-    marginRight: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  cityChipSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  cityChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  cityChipTextSelected: {
-    color: colors.primary,
-  },
-  areaScroll: {
-    flexDirection: 'row',
-  },
-  areaChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  areaChipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  areaChipText: {
+  emptySubtext: {
     fontSize: 13,
-    color: colors.text,
-  },
-  areaChipTextSelected: {
-    color: '#FFF',
-  },
-  continueButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginTop: 16,
-    gap: 8,
-  },
-  continueButtonDisabled: {
-    opacity: 0.5,
-  },
-  continueButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
+    color: colors.textSecondary,
+    marginTop: 4,
   },
 });

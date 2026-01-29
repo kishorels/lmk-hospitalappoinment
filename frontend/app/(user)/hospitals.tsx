@@ -1,59 +1,48 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, Hospital } from '../../src/context/DataContext';
 import { Card } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { Hospital } from '../../src/data/mockData';
 
 export default function Hospitals() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { getHospitalsByLocation, hospitals: allHospitals, getDoctorsByHospital } = useData();
+  const { hospitals, isLoading } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAllLocations, setShowAllLocations] = useState(false);
-
-  const hospitalsInLocation = user?.selectedCity
-    ? getHospitalsByLocation(user.selectedCity, user.selectedArea)
-    : [];
-
-  const displayHospitals = showAllLocations ? allHospitals : hospitalsInLocation;
 
   const filteredHospitals = searchQuery
-    ? displayHospitals.filter(h =>
-        h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.departments.some(d => d.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : displayHospitals;
+    ? hospitals.filter(h =>
+      h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      h.departments.some(d => d.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+    : hospitals;
 
   const renderHospital = ({ item }: { item: Hospital }) => {
-    const doctorCount = getDoctorsByHospital(item.id).length;
-    
     return (
       <Card
-        onPress={() => router.push(`/(user)/hospital/${item.id}`)}
+        onPress={() => router.push(`/(user)/hospitals?id=${item.id}`)}
         style={styles.hospitalCard}
         elevation="medium"
       >
         <View style={styles.hospitalHeader}>
           <View style={styles.hospitalIcon}>
-            <Ionicons name="business" size={32} color={colors.hospitalPrimary} />
+            <Ionicons name="business-outline" size={32} color={colors.primary} />
           </View>
           <View style={styles.headerInfo}>
             <Text style={styles.hospitalName}>{item.name}</Text>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={14} color="#FFB800" />
-              <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+              <Text style={styles.ratingText}>{item.rating?.toFixed(1) || '4.0'}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.addressRow}>
-          <Ionicons name="location" size={16} color={colors.textLight} />
+          <Ionicons name="location-outline" size={16} color={colors.textLight} />
           <Text style={styles.addressText}>{item.address}</Text>
         </View>
         <Text style={styles.areaText}>{item.area}, {item.city}</Text>
@@ -73,11 +62,14 @@ export default function Hospitals() {
 
         <View style={styles.footer}>
           <View style={styles.footerItem}>
-            <Ionicons name="people" size={18} color={colors.primary} />
-            <Text style={styles.footerText}>{doctorCount} Doctors</Text>
+            <Ionicons name="layers-outline" size={18} color={colors.primary} />
+            <Text style={styles.footerText}>{item.departments.length} Departments</Text>
           </View>
-          <TouchableOpacity style={styles.viewBtn}>
-            <Text style={styles.viewBtnText}>View Details</Text>
+          <TouchableOpacity
+            style={styles.viewBtn}
+            onPress={() => router.push(`/(user)/hospitals?id=${item.id}`)}
+          >
+            <Text style={styles.viewBtnText}>Details</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
         </View>
@@ -85,27 +77,26 @@ export default function Hospitals() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Hospitals</Text>
-        <TouchableOpacity
-          style={styles.locationToggle}
-          onPress={() => setShowAllLocations(!showAllLocations)}
-        >
-          <Ionicons
-            name={showAllLocations ? 'globe' : 'location'}
-            size={18}
-            color={colors.primary}
-          />
-          <Text style={styles.locationToggleText}>
-            {showAllLocations ? 'All Locations' : 'Near Me'}
-          </Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.title}>Hospitals</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.textLight} />
+        <Ionicons name="search-outline" size={20} color={colors.textLight} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search hospitals, departments..."
@@ -132,19 +123,7 @@ export default function Hospitals() {
         <View style={styles.emptyState}>
           <Ionicons name="business-outline" size={64} color={colors.textLight} />
           <Text style={styles.emptyTitle}>No hospitals found</Text>
-          <Text style={styles.emptyText}>
-            {showAllLocations
-              ? 'Try a different search term'
-              : 'Try viewing all locations'}
-          </Text>
-          {!showAllLocations && (
-            <TouchableOpacity
-              style={styles.showAllBtn}
-              onPress={() => setShowAllLocations(true)}
-            >
-              <Text style={styles.showAllBtnText}>Show All Hospitals</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.emptyText}>Hospitals will appear here once they register</Text>
         </View>
       )}
     </SafeAreaView>
@@ -156,42 +135,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.text,
-  },
-  locationToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  locationToggleText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.primary,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     marginHorizontal: 20,
-    marginTop: 16,
+    marginTop: 8,
     marginBottom: 8,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     gap: 12,
   },
   searchInput: {
@@ -206,6 +181,7 @@ const styles = StyleSheet.create({
   },
   hospitalCard: {
     marginBottom: 16,
+    padding: 16,
   },
   hospitalHeader: {
     flexDirection: 'row',
@@ -216,7 +192,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 16,
-    backgroundColor: colors.hospitalPrimary + '15',
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -265,14 +241,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   deptChip: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.primary + '08',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary + '20',
   },
   deptText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.primary,
   },
   footer: {
@@ -307,10 +285,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
+    marginTop: 80,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.text,
     marginTop: 16,
     marginBottom: 8,
@@ -319,17 +298,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
-  },
-  showAllBtn: {
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-  },
-  showAllBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
   },
 });
