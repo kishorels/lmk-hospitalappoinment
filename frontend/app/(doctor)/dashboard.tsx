@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, A
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { format } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
 import { useData } from '../../src/context/DataContext';
@@ -15,17 +17,23 @@ export default function DoctorDashboard() {
     const {
         appointments,
         getDoctorAppointments,
+        doctors,
         isLoading,
         getHospitalById
     } = useData();
 
     const [refreshing, setRefreshing] = React.useState(false);
 
+    // Find the doctor profile by email
+    const doctorProfile = useMemo(() => {
+        return doctors.find(d => d.email === user?.email);
+    }, [doctors, user]);
+
     useEffect(() => {
-        if (user?.id) {
-            getDoctorAppointments(user.id);
+        if (doctorProfile?.id) {
+            getDoctorAppointments(doctorProfile.id);
         }
-    }, [user]);
+    }, [doctorProfile]);
 
     const stats = useMemo(() => {
         const pending = appointments.filter(a => a.status === 'pending');
@@ -39,14 +47,14 @@ export default function DoctorDashboard() {
             { label: 'Pending', value: pending.length, icon: 'hourglass-outline', color: colors.warning },
             { label: "Today's", value: today.length, icon: 'today-outline', color: colors.success },
             { label: 'Total', value: appointments.length, icon: 'calendar-outline', color: colors.primary },
-            { label: 'Rating', value: user?.rating?.toFixed(1) || '4.0', icon: 'star-outline', color: '#FFB800' },
+            { label: 'Rating', value: (doctorProfile?.rating ?? 4.0).toFixed(1), icon: 'star-outline', color: '#FFB800' },
         ];
-    }, [appointments, user]);
+    }, [appointments, doctorProfile]);
 
     const onRefresh = async () => {
-        if (user?.id) {
+        if (doctorProfile?.id) {
             setRefreshing(true);
-            await getDoctorAppointments(user.id);
+            await getDoctorAppointments(doctorProfile.id);
             setRefreshing(false);
         }
     };
@@ -70,38 +78,51 @@ export default function DoctorDashboard() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar style="dark" />
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <View style={styles.avatar}>
-                            <Ionicons name="medkit-outline" size={32} color={colors.primary} />
+                {/* Welcome Card */}
+                <View style={styles.welcomeCardContainer}>
+                    <Card style={styles.welcomeCard}>
+                        <View style={styles.headerContent}>
+                            <View style={styles.headerLeft}>
+                                <View style={styles.avatar}>
+                                    <Ionicons name="person" size={32} color={colors.doctorPrimary} />
+                                </View>
+                                <View style={styles.doctorInfo}>
+                                    <Text style={styles.greeting}>Welcome back,</Text>
+                                    <Text style={styles.doctorName}>Dr. {doctorProfile?.name || user.name}</Text>
+                                    <Text style={styles.specialization}>{doctorProfile?.specialization || 'Specialist'}</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                                <Ionicons name="log-out-outline" size={24} color={colors.error} />
+                            </TouchableOpacity>
                         </View>
-                        <View>
-                            <Text style={styles.greeting}>Welcome back,</Text>
-                            <Text style={styles.doctorName}>Dr. {user.name}</Text>
-                            <Text style={styles.specialization}>{user.specialization}</Text>
-                        </View>
-                    </View>
-                    <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                        <Ionicons name="log-out-outline" size={24} color={colors.error} />
-                    </TouchableOpacity>
+                    </Card>
                 </View>
 
                 {/* Stats Grid */}
                 <View style={styles.statsGrid}>
                     {stats.map((stat, index) => (
-                        <View key={index} style={styles.statCard}>
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.statCard}
+                            onPress={() => {
+                                if (stat.label === 'Pending' || stat.label === "Today's" || stat.label === 'Total') {
+                                    router.push('/(doctor)/appointments');
+                                }
+                            }}
+                        >
                             <View style={[styles.statIcon, { backgroundColor: stat.color + '10' }]}>
                                 <Ionicons name={stat.icon as any} size={22} color={stat.color} />
                             </View>
                             <Text style={styles.statValue}>{stat.value}</Text>
                             <Text style={styles.statLabel}>{stat.label}</Text>
-                        </View>
+                        </TouchableOpacity>
                     ))}
                 </View>
 
@@ -119,14 +140,20 @@ export default function DoctorDashboard() {
                             <Text style={styles.actionLabel}>Appointments</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionCard}>
+                        <TouchableOpacity
+                            style={styles.actionCard}
+                            onPress={() => router.push('/(doctor)/patients')}
+                        >
                             <LinearGradient colors={['#F3E8FF', '#E9D5FF']} style={styles.actionIconBg}>
                                 <Ionicons name="people" size={24} color="#8B5CF6" />
                             </LinearGradient>
                             <Text style={styles.actionLabel}>My Patients</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.actionCard}>
+                        <TouchableOpacity
+                            style={styles.actionCard}
+                            onPress={() => router.push('/(doctor)/profile')}
+                        >
                             <LinearGradient colors={['#FFF7ED', '#FFEDD5']} style={styles.actionIconBg}>
                                 <Ionicons name="time" size={24} color="#F59E0B" />
                             </LinearGradient>
@@ -145,20 +172,25 @@ export default function DoctorDashboard() {
                     </View>
                     {pendingAppointments.length > 0 ? (
                         pendingAppointments.slice(0, 3).map((appointment) => (
-                            <Card key={appointment.id} style={styles.appointmentCard}>
-                                <View style={styles.appointmentRow}>
-                                    <View style={styles.appointmentInfo}>
-                                        <Text style={styles.patientName}>{appointment.user_name}</Text>
-                                        <Text style={styles.appointmentDate}>
-                                            {format(new Date(appointment.date), 'MMM d, yyyy')} • {appointment.time_slot}
-                                        </Text>
+                            <TouchableOpacity
+                                key={appointment.id}
+                                onPress={() => router.push('/(doctor)/appointments')}
+                            >
+                                <Card style={styles.appointmentCard}>
+                                    <View style={styles.appointmentRow}>
+                                        <View style={styles.appointmentInfo}>
+                                            <Text style={styles.patientName}>{appointment.user_name}</Text>
+                                            <Text style={styles.appointmentDate}>
+                                                {format(new Date(appointment.date), 'MMM d, yyyy')} • {appointment.time_slot}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.badgeRow}>
+                                            <Badge text={appointment.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
+                                            <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                                        </View>
                                     </View>
-                                    <View style={styles.badgeRow}>
-                                        <Badge text={appointment.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
-                                        <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
-                                    </View>
-                                </View>
-                            </Card>
+                                </Card>
+                            </TouchableOpacity>
                         ))
                     ) : (
                         <View style={styles.emptyCard}>
@@ -172,9 +204,6 @@ export default function DoctorDashboard() {
     );
 }
 
-// Re-using styles with some improvements
-import { LinearGradient } from 'expo-linear-gradient';
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -183,18 +212,30 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: 40,
     },
-    header: {
+    welcomeCardContainer: {
+        paddingTop: 16,
+        paddingBottom: 20,
+        marginHorizontal: 16, // Use margin to ensure it stays within screen
+    },
+    welcomeCard: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    headerContent: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: 16,
-        paddingBottom: 20,
+        padding: 16,
     },
     headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 16,
+    },
+    doctorInfo: {
+        flexDirection: 'column',
     },
     avatar: {
         width: 64,

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,37 +7,51 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useData } from '../../src/context/DataContext';
 import { Card } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { DAYS_OF_WEEK } from '../../src/data/mockData';
+
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function DoctorProfile() {
     const router = useRouter();
     const { user, logout } = useAuth();
-    const { doctors, updateDoctor, getHospitalById } = useData();
+    const { doctors, getHospitalById, updateDoctor } = useData();
 
     const doctorProfile = useMemo(() => {
         return doctors.find(d => d.email === user?.email);
     }, [doctors, user]);
 
-    const [videoConsultation, setVideoConsultation] = useState(doctorProfile?.videoConsultation || false);
-    const [availableDays, setAvailableDays] = useState<string[]>(doctorProfile?.availableDays || []);
+    const [availableDays, setAvailableDays] = useState<string[]>(doctorProfile?.available_days || []);
+    const [fee, setFee] = useState(doctorProfile?.consultation_fee?.toString() || '500');
+    const [isUpdating, setIsUpdating] = useState(false);
 
     const handleToggleDay = async (day: string) => {
-        if (!doctorProfile) return;
-
         const newDays = availableDays.includes(day)
             ? availableDays.filter(d => d !== day)
             : [...availableDays, day];
-
         setAvailableDays(newDays);
-        await updateDoctor(doctorProfile.id, { availableDays: newDays });
+
+        if (doctorProfile?.id) {
+            await updateDoctor(doctorProfile.id, { available_days: newDays });
+        }
     };
 
-    const handleToggleVideoConsultation = async () => {
-        if (!doctorProfile) return;
+    const handleUpdateFee = async () => {
+        if (!doctorProfile?.id) return;
 
-        const newValue = !videoConsultation;
-        setVideoConsultation(newValue);
-        await updateDoctor(doctorProfile.id, { videoConsultation: newValue });
+        const newFee = parseInt(fee);
+        if (isNaN(newFee) || newFee < 0) {
+            Alert.alert('Error', 'Please enter a valid consultation fee');
+            return;
+        }
+
+        setIsUpdating(true);
+        const success = await updateDoctor(doctorProfile.id, { consultation_fee: newFee });
+        setIsUpdating(false);
+
+        if (success) {
+            Alert.alert('Success', 'Consultation fee updated successfully');
+        } else {
+            Alert.alert('Error', 'Failed to update consultation fee');
+        }
     };
 
     const handleLogout = async () => {
@@ -86,49 +100,41 @@ export default function DoctorProfile() {
                             <Text style={styles.specialization}>{doctorProfile.specialization}</Text>
                             <View style={styles.ratingRow}>
                                 <Ionicons name="star" size={16} color="#FFB800" />
-                                <Text style={styles.ratingText}>{doctorProfile.rating.toFixed(1)}</Text>
+                                <Text style={styles.ratingText}>{(doctorProfile.rating ?? 4.0).toFixed(1)}</Text>
                                 <Text style={styles.experienceText}>• {doctorProfile.experience} years exp</Text>
                             </View>
                         </View>
                     </View>
 
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>₹{doctorProfile.consultationFee}</Text>
-                            <Text style={styles.statLabel}>Consultation Fee</Text>
+                    <View style={styles.feeUpdateSection}>
+                        <Text style={styles.sectionLabel}>Set Consultation Fee (Base Fee)</Text>
+                        <View style={styles.feeInputRow}>
+                            <View style={styles.feeInputContainer}>
+                                <Text style={styles.currencySymbol}>₹</Text>
+                                <TextInput
+                                    style={styles.feeInput}
+                                    value={fee}
+                                    onChangeText={setFee}
+                                    keyboardType="numeric"
+                                    placeholder="500"
+                                />
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.updateButton, isUpdating && styles.disabledButton]}
+                                onPress={handleUpdateFee}
+                                disabled={isUpdating}
+                            >
+                                <Text style={styles.updateButtonText}>{isUpdating ? '...' : 'Update'}</Text>
+                            </TouchableOpacity>
                         </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{doctorProfile.hospitalIds.length}</Text>
-                            <Text style={styles.statLabel}>Hospitals</Text>
-                        </View>
+                        <Text style={styles.feeHint}>
+                            * This is your base fee. A 10% service commission will be added for patients.
+                        </Text>
+                        <Text style={styles.totalDisplay}>
+                            Total Patient Pay: ₹{Math.round(parseInt(fee || '0') * 1.1)}
+                        </Text>
                     </View>
                 </Card>
-
-                {/* Settings Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Settings</Text>
-
-                    <Card style={styles.settingCard}>
-                        <View style={styles.settingRow}>
-                            <View style={styles.settingLeft}>
-                                <View style={[styles.settingIcon, { backgroundColor: colors.secondary + '20' }]}>
-                                    <Ionicons name="videocam" size={20} color={colors.secondary} />
-                                </View>
-                                <View>
-                                    <Text style={styles.settingLabel}>Video Consultation</Text>
-                                    <Text style={styles.settingDesc}>Accept video consultations</Text>
-                                </View>
-                            </View>
-                            <Switch
-                                value={videoConsultation}
-                                onValueChange={handleToggleVideoConsultation}
-                                trackColor={{ false: colors.border, true: colors.secondary }}
-                                thumbColor="#FFF"
-                            />
-                        </View>
-                    </Card>
-                </View>
 
                 {/* Availability Section */}
                 <View style={styles.section}>
@@ -163,28 +169,30 @@ export default function DoctorProfile() {
                     </Card>
                 </View>
 
-                {/* Associated Hospitals */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Associated Hospitals</Text>
+                {/* Associated Hospital */}
+                {doctorProfile.hospital_id && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Associated Hospital</Text>
 
-                    {doctorProfile.hospitalIds.map((hospitalId) => {
-                        const hospital = getHospitalById(hospitalId);
-                        if (!hospital) return null;
-                        return (
-                            <Card key={hospitalId} style={styles.hospitalCard}>
-                                <View style={styles.hospitalRow}>
-                                    <View style={styles.hospitalIcon}>
-                                        <Ionicons name="business" size={24} color={colors.hospitalPrimary} />
+                        {(() => {
+                            const hospital = getHospitalById(doctorProfile.hospital_id);
+                            if (!hospital) return null;
+                            return (
+                                <Card style={styles.hospitalCard}>
+                                    <View style={styles.hospitalRow}>
+                                        <View style={styles.hospitalIcon}>
+                                            <Ionicons name="business" size={24} color={colors.hospitalPrimary} />
+                                        </View>
+                                        <View style={styles.hospitalInfo}>
+                                            <Text style={styles.hospitalName}>{hospital.name}</Text>
+                                            <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
+                                        </View>
                                     </View>
-                                    <View style={styles.hospitalInfo}>
-                                        <Text style={styles.hospitalName}>{hospital.name}</Text>
-                                        <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
-                                    </View>
-                                </View>
-                            </Card>
-                        );
-                    })}
-                </View>
+                                </Card>
+                            );
+                        })()}
+                    </View>
+                )}
 
                 {/* Logout Button */}
                 <View style={styles.section}>
@@ -266,6 +274,72 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: colors.border,
         paddingTop: 16,
+    },
+    feeUpdateSection: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    sectionLabel: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: colors.textSecondary,
+        marginBottom: 8,
+    },
+    feeInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginTop: 8,
+    },
+    feeInputContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    currencySymbol: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: colors.text,
+        marginRight: 4,
+    },
+    feeInput: {
+        flex: 1,
+        paddingVertical: 10,
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    updateButton: {
+        backgroundColor: colors.doctorPrimary,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 12,
+    },
+    disabledButton: {
+        opacity: 0.6,
+    },
+    updateButtonText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+    },
+    feeHint: {
+        fontSize: 11,
+        color: colors.textSecondary,
+        marginTop: 8,
+        fontStyle: 'italic',
+    },
+    totalDisplay: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: colors.success,
+        marginTop: 4,
     },
     statItem: {
         flex: 1,

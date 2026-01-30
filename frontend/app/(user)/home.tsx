@@ -4,9 +4,10 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData, DISEASE_CATEGORIES } from '../../src/context/DataContext';
+import { useData, DISEASE_CATEGORIES, COMMISSION_RATE } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
 import { colors, gradients } from '../../src/theme/colors';
 
@@ -82,58 +83,64 @@ export default function UserHome() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
+      <StatusBar style="light" />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Gradient Header */}
+        {/* Gradient Header - Goes to the top, content uses SafeAreaView */}
         <LinearGradient
           colors={gradients.primary as [string, string]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerGradient}
         >
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.greetingSmall}>Welcome back,</Text>
-              <View style={styles.greetingRow}>
-                <Text style={styles.greeting}>{user?.name || 'User'}</Text>
-                <Ionicons name="hand-right" size={22} color="#FFF" style={styles.waveIcon} />
+          <SafeAreaView edges={['top']}>
+            <View style={styles.headerContent}>
+              <View>
+                <Text style={styles.greetingSmall}>Welcome back,</Text>
+                <View style={styles.greetingRow}>
+                  <Text style={styles.greeting}>{user?.name || 'User'}</Text>
+                  <Ionicons name="hand-right" size={22} color="#FFF" style={styles.waveIcon} />
+                </View>
+                <TouchableOpacity style={styles.locationRow} onPress={getLocation}>
+                  <Ionicons name="location" size={14} color="rgba(255,255,255,0.9)" />
+                  {loadingLocation ? (
+                    <Text style={styles.locationText}>Getting location...</Text>
+                  ) : (
+                    <Text style={styles.locationText}>{location?.area}, {location?.city}</Text>
+                  )}
+                  <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.7)" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.locationRow} onPress={getLocation}>
-                <Ionicons name="location" size={14} color="rgba(255,255,255,0.9)" />
-                {loadingLocation ? (
-                  <Text style={styles.locationText}>Getting location...</Text>
-                ) : (
-                  <Text style={styles.locationText}>{location?.area}, {location?.city}</Text>
-                )}
-                <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.7)" />
+              <TouchableOpacity
+                style={styles.notificationBtn}
+                onPress={() => router.push('/(user)/notifications')}
+              >
+                <Ionicons name="notifications-outline" size={22} color="#FFF" />
+                {upcomingAppointments.length > 0 && <View style={styles.notificationBadge} />}
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.notificationBtn}>
-              <Ionicons name="notifications-outline" size={22} color="#FFF" />
-              {upcomingAppointments.length > 0 && <View style={styles.notificationBadge} />}
-            </TouchableOpacity>
-          </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color={colors.textLight} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search doctors, specializations..."
-              placeholderTextColor={colors.textLight}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color={colors.textLight} />
-              </TouchableOpacity>
-            )}
-          </View>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color={colors.textLight} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search doctors, specializations..."
+                placeholderTextColor={colors.textLight}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Ionicons name="close-circle" size={20} color={colors.textLight} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </SafeAreaView>
         </LinearGradient>
 
         {/* Search Results */}
@@ -307,12 +314,12 @@ export default function UserHome() {
                       </View>
                       <View style={styles.metaItem}>
                         <Ionicons name="star" size={12} color="#FFB800" />
-                        <Text style={styles.metaText}>{doctor.rating.toFixed(1)}</Text>
+                        <Text style={styles.metaText}>{(doctor.rating ?? 4.0).toFixed(1)}</Text>
                       </View>
                     </View>
                   </View>
                   <View style={styles.doctorFee}>
-                    <Text style={styles.feeAmount}>₹{doctor.consultation_fee}</Text>
+                    <Text style={styles.feeAmount}>₹{Math.round((doctor.consultation_fee || 0) * (1 + COMMISSION_RATE))}</Text>
                     <Ionicons name="chevron-forward" size={18} color={colors.primary} />
                   </View>
                 </View>
@@ -354,7 +361,7 @@ export default function UserHome() {
                     </View>
                     <View style={styles.ratingRow}>
                       <Ionicons name="star" size={14} color="#FFB800" />
-                      <Text style={styles.ratingText}>{hospital.rating.toFixed(1)}</Text>
+                      <Text style={styles.ratingText}>{(hospital.rating ?? 4.0).toFixed(1)}</Text>
                       <Text style={styles.deptText}>{hospital.departments.length} departments</Text>
                     </View>
                   </View>
@@ -370,7 +377,7 @@ export default function UserHome() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

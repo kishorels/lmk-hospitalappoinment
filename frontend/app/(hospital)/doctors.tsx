@@ -80,7 +80,7 @@ export default function HospitalDoctors() {
                     <View style={styles.doctorMeta}>
                         <View style={styles.metaItem}>
                             <Ionicons name="star" size={14} color="#FFB800" />
-                            <Text style={styles.metaText}>{item.rating.toFixed(1)}</Text>
+                            <Text style={styles.metaText}>{(item.rating ?? 4.0).toFixed(1)}</Text>
                         </View>
                         <View style={styles.metaItem}>
                             <Ionicons name="briefcase" size={14} color={colors.textLight} />

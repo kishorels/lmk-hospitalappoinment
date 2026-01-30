@@ -46,6 +46,9 @@ export interface Appointment {
   type: 'in-person' | 'video';
   reason?: string;
   status: 'pending' | 'accepted' | 'rejected' | 'completed';
+  suggested_date?: string;
+  suggested_time?: string;
+  doctor_note?: string;
   created_at: string;
 }
 
@@ -77,11 +80,14 @@ interface DataContextType {
   createAppointment: (data: Omit<Appointment, 'id' | 'created_at' | 'status'>) => Promise<Appointment | null>;
   getUserAppointments: (userId: string) => Promise<void>;
   getDoctorAppointments: (doctorId: string) => Promise<void>;
-  updateAppointmentStatus: (id: string, status: string) => Promise<boolean>;
+  updateAppointmentStatus: (id: string, status: string, suggestion?: { date?: string; time?: string; note?: string }) => Promise<boolean>;
   // Search
   searchDoctors: (query: string) => Doctor[];
   getDoctorsBySpecialization: (specializations: string[]) => Doctor[];
+  updateDoctor: (id: string, data: Partial<Doctor>) => Promise<boolean>;
 }
+
+export const COMMISSION_RATE = 0.1; // 10%
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
@@ -179,13 +185,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const updateAppointmentStatus = async (id: string, status: string): Promise<boolean> => {
+  const updateAppointmentStatus = async (id: string, status: string, suggestion?: { date?: string; time?: string; note?: string }): Promise<boolean> => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/appointments/${id}/status?status=${status}`, {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/${id}/status`, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          suggested_date: suggestion?.date,
+          suggested_time: suggestion?.time,
+          doctor_note: suggestion?.note
+        }),
       });
       if (response.ok) {
-        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: status as any } : a));
+        // Update local state immediately to reflect in all components
+        setAppointments(prev => prev.map(a =>
+          a.id === id ? {
+            ...a,
+            status: status as any,
+            suggested_date: suggestion?.date || a.suggested_date,
+            suggested_time: suggestion?.time || a.suggested_time,
+            doctor_note: suggestion?.note || a.doctor_note
+          } : a
+        ));
         return true;
       }
     } catch (error) {
@@ -208,6 +230,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
   };
 
+  const updateDoctor = async (id: string, data: Partial<Doctor>): Promise<boolean> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/user/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        const updatedDoctor = await response.json();
+        setDoctors(prev => prev.map(d => d.id === id ? { ...d, ...updatedDoctor } : d));
+        return true;
+      }
+    } catch (error) {
+      console.error('Error updating doctor:', error);
+    }
+    return false;
+  };
+
   return (
     <DataContext.Provider value={{
       hospitals,
@@ -225,6 +265,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateAppointmentStatus,
       searchDoctors,
       getDoctorsBySpecialization,
+      updateDoctor,
     }}>
       {children}
     </DataContext.Provider>

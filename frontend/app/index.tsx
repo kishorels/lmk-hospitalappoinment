@@ -6,13 +6,13 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  StatusBar,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../src/context/AuthContext';
 import { colors } from '../src/theme/colors';
 
@@ -78,7 +78,7 @@ export default function Welcome() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar style="light" />
 
       {/* Gradient Background */}
       <LinearGradient
@@ -93,6 +93,7 @@ export default function Welcome() {
       <View style={styles.circle2} />
 
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="light" />
         <View style={styles.content}>
 
           {/* Logo & Hero Section */}
@@ -112,7 +113,7 @@ export default function Welcome() {
               </View>
             </View>
 
-            <Text style={styles.brandName}>MedBook</Text>
+            <Text style={styles.brandName} numberOfLines={1} adjustsFontSizeToFit>MedBook</Text>
             <Text style={styles.tagline}>Your Health, Our Priority</Text>
           </Animated.View>
 

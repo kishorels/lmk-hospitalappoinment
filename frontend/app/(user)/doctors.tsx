@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useData, Doctor, DISEASE_CATEGORIES } from '../../src/context/DataContext';
+import { StatusBar } from 'expo-status-bar';
+import { useData, Doctor, DISEASE_CATEGORIES, COMMISSION_RATE } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
@@ -67,7 +68,7 @@ export default function Doctors() {
         <View style={styles.doctorFooter}>
           <View style={styles.feeContainer}>
             <Text style={styles.feeLabel}>Consultation</Text>
-            <Text style={styles.feeValue}>₹{item.consultation_fee}</Text>
+            <Text style={styles.feeValue}>₹{Math.round((item.consultation_fee || 0) * (1 + COMMISSION_RATE))}</Text>
           </View>
           <TouchableOpacity
             style={styles.bookBtn}
@@ -92,7 +93,8 @@ export default function Doctors() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar style="dark" />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

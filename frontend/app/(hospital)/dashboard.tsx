@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../src/context/AuthContext';
 import { useData } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
@@ -73,6 +74,7 @@ export default function HospitalDashboard() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar style="dark" />
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

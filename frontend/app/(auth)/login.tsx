@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, StatusBar as RNStatusBar } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useAuth, UserRole } from '../../src/context/AuthContext';
 import { Button, Input } from '../../src/components';
 import { colors, gradients } from '../../src/theme/colors';
@@ -67,71 +68,78 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={gradients.primary as [string, string]}
-        style={styles.headerGradient}
-      >
-        <SafeAreaView edges={['top']}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Ionicons name="log-in-outline" size={48} color="#FFF" />
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue to MedBook</Text>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-
+      <StatusBar style="light" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.form}>
-            <Input
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              error={errors.email}
-              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
-            />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          bounces={false}
+        >
+          <LinearGradient
+            colors={gradients.primary as [string, string]}
+            style={styles.headerGradient}
+          >
+            <SafeAreaView edges={['top']}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <View style={styles.headerContent}>
+                <Ionicons name="log-in-outline" size={48} color="#FFF" />
+                <Text style={styles.title}>Welcome Back</Text>
+                <Text style={styles.subtitle}>Sign in to continue to MedBook</Text>
+              </View>
+            </SafeAreaView>
+          </LinearGradient>
 
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              secureTextEntry
-              error={errors.password}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
-            />
+          <View style={styles.formContainer}>
+            <View style={styles.form}>
+              <Input
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                error={errors.email}
+                icon="mail-outline"
+              />
 
-            <Button
-              title={loading ? 'Signing in...' : 'Sign In'}
-              onPress={handleLogin}
-              disabled={loading}
-              size="large"
-              style={styles.loginButton}
-            />
+              <Input
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                secureTextEntry
+                error={errors.password}
+                icon="lock-closed-outline"
+              />
 
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
+              <Button
+                title={loading ? 'Signing in...' : 'Sign In'}
+                onPress={handleLogin}
+                disabled={loading}
+                size="large"
+                style={styles.loginButton}
+              />
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.signupLink}
+                onPress={() => router.push('/(auth)/signup')}
+              >
+                <Text style={styles.signupText}>
+                  Don't have an account? <Text style={styles.signupTextBold}>Sign Up</Text>
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.signupLink}
-              onPress={() => router.push('/(auth)/signup')}
-            >
-              <Text style={styles.signupText}>
-                Don't have an account? <Text style={styles.signupTextBold}>Sign Up</Text>
-              </Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -148,6 +156,9 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
+  },
+  formContainer: {
+    padding: 24,
   },
   backButton: {
     width: 44,

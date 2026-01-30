@@ -108,7 +108,7 @@ export default function HospitalProfile() {
                             <Text style={styles.location}>{hospitalProfile.area}, {hospitalProfile.city}</Text>
                             <View style={styles.ratingRow}>
                                 <Ionicons name="star" size={16} color="#FFB800" />
-                                <Text style={styles.ratingText}>{hospitalProfile.rating.toFixed(1)}</Text>
+                                <Text style={styles.ratingText}>{(hospitalProfile.rating ?? 4.0).toFixed(1)}</Text>
                             </View>
                         </View>
                     </View>

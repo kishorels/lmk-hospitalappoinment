@@ -1,9 +1,14 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/theme/colors';
 
 export default function DoctorLayout() {
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = 60 + insets.bottom;
+
     return (
         <Tabs
             screenOptions={{
@@ -14,8 +19,8 @@ export default function DoctorLayout() {
                     backgroundColor: colors.surface,
                     borderTopWidth: 1,
                     borderTopColor: colors.border,
-                    height: 60,
-                    paddingBottom: 8,
+                    height: tabBarHeight,
+                    paddingBottom: insets.bottom + 8,
                     paddingTop: 8,
                 },
                 tabBarLabelStyle: {
@@ -27,9 +32,9 @@ export default function DoctorLayout() {
             <Tabs.Screen
                 name="dashboard"
                 options={{
-                    title: 'Dashboard',
+                    title: 'Home',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="grid" size={size} color={color} />
+                        <Ionicons name="home" size={size} color={color} />
                     ),
                 }}
             />

@@ -127,29 +127,28 @@ export default function Signup() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[getRoleColor(), getRoleColor() + 'CC']}
-        style={styles.headerGradient}
-      >
-        <SafeAreaView edges={['top']}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <View style={styles.roleIconContainer}>
-              <Ionicons name={getRoleIcon()} size={32} color="#FFF" />
-            </View>
-            <Text style={styles.title}>Create {getRoleTitle()} Account</Text>
-            <Text style={styles.subtitle}>Fill in your details to get started</Text>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <LinearGradient
+            colors={[getRoleColor(), getRoleColor() + 'CC']}
+            style={styles.headerGradient}
+          >
+            <SafeAreaView edges={['top']}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <View style={styles.headerContent}>
+                <View style={styles.roleIconContainer}>
+                  <Ionicons name={getRoleIcon()} size={32} color="#FFF" />
+                </View>
+                <Text style={styles.title}>Create {getRoleTitle()} Account</Text>
+                <Text style={styles.subtitle}>Fill in your details to get started</Text>
+              </View>
+            </SafeAreaView>
+          </LinearGradient>
           <View style={styles.form}>
             <Input
               label="Full Name"
@@ -330,10 +329,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
   },
   form: {
     gap: 12,
+    padding: 24,
   },
   fieldLabel: {
     fontSize: 14,

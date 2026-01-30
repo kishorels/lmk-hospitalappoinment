@@ -1,26 +1,30 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, Appointment } from '../../src/context/DataContext';
 import { Card, Badge, Button } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { Appointment } from '../../src/data/mockData';
 
 export default function Appointments() {
   const router = useRouter();
   const { user } = useAuth();
-  const { getAppointmentsByUser, getDoctorById, getHospitalById } = useData();
+  const { appointments, getUserAppointments, getDoctorById, getHospitalById } = useData();
 
-  const appointments = useMemo(() => {
-    if (!user) return [];
-    return getAppointmentsByUser(user.id).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  useEffect(() => {
+    if (user) {
+      getUserAppointments(user.id);
+    }
   }, [user]);
+
+  const sortedAppointments = useMemo(() => {
+    return [...appointments].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [appointments]);
 
   const getStatusVariant = (status: Appointment['status']) => {
     switch (status) {
@@ -33,10 +37,8 @@ export default function Appointments() {
   };
 
   const renderAppointment = ({ item }: { item: Appointment }) => {
-    const doctor = getDoctorById(item.doctorId);
-    const hospital = getHospitalById(item.hospitalId);
-
-    if (!doctor || !hospital) return null;
+    const doctor = getDoctorById(item.doctor_id);
+    const hospital = item.hospital_id ? getHospitalById(item.hospital_id) : null;
 
     return (
       <Card style={styles.appointmentCard}>
@@ -53,8 +55,8 @@ export default function Appointments() {
             <Ionicons name="person" size={24} color={colors.doctorPrimary} />
           </View>
           <View style={styles.doctorInfo}>
-            <Text style={styles.doctorName}>{doctor.name}</Text>
-            <Text style={styles.doctorSpec}>{doctor.specialization}</Text>
+            <Text style={styles.doctorName}>{item.doctor_name}</Text>
+            <Text style={styles.doctorSpec}>{doctor?.specialization || 'Specialist'}</Text>
           </View>
         </View>
 
@@ -67,13 +69,49 @@ export default function Appointments() {
           </View>
           <View style={styles.detailRow}>
             <Ionicons name="time" size={18} color={colors.textLight} />
-            <Text style={styles.detailText}>{item.timeSlot}</Text>
+            <Text style={styles.detailText}>{item.time_slot}</Text>
           </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="business" size={18} color={colors.textLight} />
-            <Text style={styles.detailText}>{hospital.name}</Text>
-          </View>
+          {(hospital || item.hospital_name) && (
+            <View style={styles.detailRow}>
+              <Ionicons name="business" size={18} color={colors.textLight} />
+              <Text style={styles.detailText}>{hospital?.name || item.hospital_name}</Text>
+            </View>
+          )}
         </View>
+
+        {item.status === 'rejected' && item.suggested_date && (
+          <View style={styles.rescheduleSection}>
+            <View style={styles.rescheduleHeader}>
+              <Ionicons name="chatbubble-ellipses" size={20} color={colors.doctorPrimary} />
+              <Text style={styles.rescheduleTitle}>Doctor's Suggestion</Text>
+            </View>
+            <Text style={styles.doctorNote}>"{item.doctor_note}"</Text>
+            <View style={styles.suggestionBox}>
+              <Text style={styles.suggestionTitle}>New Suggested Time:</Text>
+              <View style={styles.suggestionRow}>
+                <Ionicons name="calendar-outline" size={16} color={colors.text} />
+                <Text style={styles.suggestionText}>{format(new Date(item.suggested_date), 'MMM d, yyyy')}</Text>
+              </View>
+              <View style={styles.suggestionRow}>
+                <Ionicons name="time-outline" size={16} color={colors.text} />
+                <Text style={styles.suggestionText}>{item.suggested_time}</Text>
+              </View>
+            </View>
+            <Button
+              title="Book Suggested Time"
+              size="small"
+              onPress={() => router.push({
+                pathname: '/(user)/booking',
+                params: {
+                  doctorId: item.doctor_id,
+                  preselectDate: item.suggested_date,
+                  preselectTime: item.suggested_time
+                }
+              })}
+              style={styles.bookSuggestedBtn}
+            />
+          </View>
+        )}
 
         {item.type === 'video' && item.status === 'accepted' && (
           <TouchableOpacity style={styles.joinButton}>
@@ -91,9 +129,9 @@ export default function Appointments() {
         <Text style={styles.title}>My Appointments</Text>
       </View>
 
-      {appointments.length > 0 ? (
+      {sortedAppointments.length > 0 ? (
         <FlatList
-          data={appointments}
+          data={sortedAppointments}
           keyExtractor={(item) => item.id}
           renderItem={renderAppointment}
           contentContainerStyle={styles.listContent}
@@ -231,5 +269,57 @@ const styles = StyleSheet.create({
   },
   findButton: {
     paddingHorizontal: 32,
+  },
+  rescheduleSection: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: colors.doctorPrimary + '05',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.doctorPrimary + '20',
+  },
+  rescheduleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  rescheduleTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.doctorPrimary,
+  },
+  doctorNote: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  suggestionBox: {
+    backgroundColor: colors.surface,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  suggestionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  suggestionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  bookSuggestedBtn: {
+    marginTop: 4,
   },
 });

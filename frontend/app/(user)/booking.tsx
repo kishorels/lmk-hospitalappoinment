@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, addDays } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData, Doctor } from '../../src/context/DataContext';
+import { useData, Doctor, COMMISSION_RATE } from '../../src/context/DataContext';
 import { Button } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
@@ -13,14 +13,20 @@ const { width } = Dimensions.get('window');
 
 export default function Booking() {
   const router = useRouter();
-  const { doctorId } = useLocalSearchParams<{ doctorId: string }>();
+  const { doctorId, preselectDate, preselectTime } = useLocalSearchParams<{
+    doctorId: string,
+    preselectDate?: string,
+    preselectTime?: string
+  }>();
   const { user } = useAuth();
   const { getDoctorById, createAppointment, isLoading: dataLoading } = useData();
 
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointmentType, setAppointmentType] = useState<'in-person' | 'video'>('in-person');
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(
+    preselectDate ? new Date(preselectDate) : null
+  );
+  const [selectedTime, setSelectedTime] = useState<string | null>(preselectTime || null);
   const [bookingLoading, setBookingLoading] = useState(false);
 
   useEffect(() => {
@@ -214,7 +220,7 @@ export default function Booking() {
                 </View>
                 <View style={styles.summaryRow}>
                   <Ionicons name="card-outline" size={18} color={colors.primary} />
-                  <Text style={styles.summaryText}>Fee: ₹{doctor.consultation_fee}</Text>
+                  <Text style={styles.summaryText}>Fee: ₹{Math.round((doctor.consultation_fee || 0) * (1 + COMMISSION_RATE))}</Text>
                 </View>
               </View>
             </View>

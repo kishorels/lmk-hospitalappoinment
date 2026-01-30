@@ -355,9 +355,9 @@ export function analyzeSymptoms(selectedSymptoms: string[]): {
         return { condition, score, matchCount: matchingSymptoms.length };
     });
 
-    // Filter conditions with at least 40% match or 2+ symptoms
+    // Filter conditions with at least some match
     const relevantConditions = conditionScores
-        .filter(cs => cs.score >= 0.4 || cs.matchCount >= 2)
+        .filter(cs => cs.matchCount >= 1) // Match at least one symptom
         .sort((a, b) => b.score - a.score)
         .slice(0, 3)
         .map(cs => cs.condition);
