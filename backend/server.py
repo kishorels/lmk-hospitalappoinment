@@ -115,6 +115,9 @@ class Appointment(BaseModel):
     type: str = "in-person"
     reason: Optional[str] = None
     status: str = "pending"
+    suggested_date: Optional[str] = None
+    suggested_time: Optional[str] = None
+    doctor_note: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class AppointmentCreate(BaseModel):
@@ -185,6 +188,22 @@ async def get_user(user_id: str):
     if not user: raise HTTPException(status_code=404, detail="User not found")
     return UserResponse(**user)
 
+@api_router.put("/auth/user/{user_id}", response_model=UserResponse)
+async def update_user(user_id: str, update_data: dict):
+    # Remove sensitive fields if present
+    update_data.pop("password", None)
+    update_data.pop("password_hash", None)
+    update_data.pop("role", None)
+    update_data.pop("id", None)
+    
+    existing = await db.users.find_one({"id": user_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one({"id": user_id}, {"$set": update_data})
+    updated = await db.users.find_one({"id": user_id})
+    return UserResponse(**updated)
+
 
 # ==================== DATA ====================
 
@@ -226,10 +245,19 @@ async def get_doctor_appointments(doctor_id: str):
     items = await db.appointments.find({"doctor_id": doctor_id}).sort("created_at", -1).to_list(1000)
     return [Appointment(**a) for a in items]
 
+class StatusUpdate(BaseModel):
+    status: str
+    suggested_date: Optional[str] = None
+    suggested_time: Optional[str] = None
+    doctor_note: Optional[str] = None
+
 @api_router.put("/appointments/{appointment_id}/status")
-async def update_status(appointment_id: str, status: str):
-    await db.appointments.update_one({"id": appointment_id}, {"$set": {"status": status}})
-    return {"status": status}
+async def update_status(appointment_id: str, update: StatusUpdate):
+    await db.appointments.update_one(
+        {"id": appointment_id}, 
+        {"$set": update.dict(exclude_unset=True)}
+    )
+    return {"status": update.status}
 
 
 # ==================== MEDICAL RECORDS ====================
