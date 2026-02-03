@@ -20,6 +20,8 @@ export interface AuthUser {
   address?: string;
   city?: string;
   area?: string;
+  state?: string;
+  pincode?: string;
   departments?: string[];
 }
 
@@ -36,6 +38,10 @@ interface AuthContextType {
     specialization?: string;
     experience?: number;
     address?: string;
+    area?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
     departments?: string[];
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -115,6 +121,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     specialization?: string;
     experience?: number;
     address?: string;
+    area?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
     departments?: string[];
   }): Promise<{ success: boolean; error?: string }> => {
     try {

@@ -16,6 +16,7 @@ export default function DoctorAppointments() {
         appointments,
         getDoctorAppointments,
         updateAppointmentStatus,
+        updateAppointmentRecord,
         doctors,
         getHospitalById
     } = useData();
@@ -27,6 +28,16 @@ export default function DoctorAppointments() {
     const [suggestedTime, setSuggestedTime] = useState('');
     const [doctorNote, setDoctorNote] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [recordModalVisible, setRecordModalVisible] = useState(false);
+    const [recordAppointmentId, setRecordAppointmentId] = useState<string | null>(null);
+    const [patientComplaint, setPatientComplaint] = useState('');
+    const [diagnosis, setDiagnosis] = useState('');
+    const [recordNotes, setRecordNotes] = useState('');
+    const [medName, setMedName] = useState('');
+    const [medDosage, setMedDosage] = useState('');
+    const [medInstructions, setMedInstructions] = useState('');
+    const [medDays, setMedDays] = useState('');
+    const [prescription, setPrescription] = useState<{ name: string; dosage?: string; instructions?: string; days?: number }[]>([]);
 
     const doctorProfile = useMemo(() => {
         return doctors.find(d => d.email === user?.email);
@@ -78,6 +89,55 @@ export default function DoctorAppointments() {
             Alert.alert('Error', 'Failed to send reschedule suggestion');
         } finally {
             setIsUpdating(false);
+        }
+    };
+
+    const openRecordModal = (appointment: Appointment) => {
+        setRecordAppointmentId(appointment.id);
+        setPatientComplaint(appointment.patient_complaint || '');
+        setDiagnosis(appointment.diagnosis || '');
+        setRecordNotes(appointment.record_notes || '');
+        setPrescription(appointment.prescription || []);
+        setRecordModalVisible(true);
+    };
+
+    const addMedicine = () => {
+        if (!medName.trim()) return;
+        setPrescription(prev => [
+            ...prev,
+            {
+                name: medName.trim(),
+                dosage: medDosage.trim() || undefined,
+                instructions: medInstructions.trim() || undefined,
+                days: medDays ? parseInt(medDays) : undefined,
+            },
+        ]);
+        setMedName('');
+        setMedDosage('');
+        setMedInstructions('');
+        setMedDays('');
+    };
+
+    const removeMedicine = (index: number) => {
+        setPrescription(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const saveRecord = async () => {
+        if (!recordAppointmentId || !doctorProfile?.id) return;
+        setIsUpdating(true);
+        const updated = await updateAppointmentRecord(recordAppointmentId, {
+            doctor_id: doctorProfile.id,
+            patient_complaint: patientComplaint,
+            diagnosis,
+            record_notes: recordNotes,
+            prescription,
+        });
+        setIsUpdating(false);
+        if (updated) {
+            Alert.alert('Saved', 'Patient record updated.');
+            setRecordModalVisible(false);
+        } else {
+            Alert.alert('Error', 'Failed to save record.');
         }
     };
 
@@ -140,6 +200,12 @@ export default function DoctorAppointments() {
                             <Text style={styles.actionBtnText}>Reject</Text>
                         </TouchableOpacity>
                     </View>
+                )}
+                {(item.status === 'accepted' || item.status === 'completed') && (
+                    <TouchableOpacity style={styles.recordBtn} onPress={() => openRecordModal(item)}>
+                        <Ionicons name="document-text" size={18} color="#FFF" />
+                        <Text style={styles.recordBtnText}>Add Record</Text>
+                    </TouchableOpacity>
                 )}
             </Card>
         );
@@ -232,6 +298,106 @@ export default function DoctorAppointments() {
                     </View>
                 </View>
             </Modal>
+
+            <Modal visible={recordModalVisible} transparent={true} animationType="slide">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Patient Record</Text>
+                            <TouchableOpacity onPress={() => setRecordModalVisible(false)}>
+                                <Ionicons name="close" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Patient Complaint</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={patientComplaint}
+                                    onChangeText={setPatientComplaint}
+                                    placeholder="What patient reported..."
+                                />
+                            </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Diagnosis</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={diagnosis}
+                                    onChangeText={setDiagnosis}
+                                    placeholder="Your diagnosis"
+                                />
+                            </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Notes</Text>
+                                <TextInput
+                                    style={[styles.textInput, styles.textArea]}
+                                    value={recordNotes}
+                                    onChangeText={setRecordNotes}
+                                    placeholder="Additional notes"
+                                    multiline
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Prescription</Text>
+                                <View style={styles.medicineRow}>
+                                    <TextInput
+                                        style={[styles.textInput, styles.medInput]}
+                                        value={medName}
+                                        onChangeText={setMedName}
+                                        placeholder="Medicine name"
+                                    />
+                                    <TextInput
+                                        style={[styles.textInput, styles.medInput]}
+                                        value={medDosage}
+                                        onChangeText={setMedDosage}
+                                        placeholder="Dosage"
+                                    />
+                                </View>
+                                <View style={styles.medicineRow}>
+                                    <TextInput
+                                        style={[styles.textInput, styles.medInput]}
+                                        value={medInstructions}
+                                        onChangeText={setMedInstructions}
+                                        placeholder="Instructions"
+                                    />
+                                    <TextInput
+                                        style={[styles.textInput, styles.medInput]}
+                                        value={medDays}
+                                        onChangeText={setMedDays}
+                                        placeholder="Days"
+                                        keyboardType="numeric"
+                                    />
+                                </View>
+                                <TouchableOpacity style={styles.addMedBtn} onPress={addMedicine}>
+                                    <Ionicons name="add-circle" size={18} color="#FFF" />
+                                    <Text style={styles.addMedText}>Add Medicine</Text>
+                                </TouchableOpacity>
+
+                                {prescription.map((m, idx) => (
+                                    <View key={`${m.name}-${idx}`} style={styles.prescriptionItem}>
+                                        <View style={styles.prescriptionInfo}>
+                                            <Text style={styles.prescriptionName}>{m.name}</Text>
+                                            <Text style={styles.prescriptionMeta}>
+                                                {m.dosage || 'Dose'} • {m.instructions || 'Instructions'} • {m.days ? `${m.days} days` : 'Days'}
+                                            </Text>
+                                        </View>
+                                        <TouchableOpacity onPress={() => removeMedicine(idx)}>
+                                            <Ionicons name="trash" size={18} color={colors.error} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+
+                            <Button
+                                title={isUpdating ? 'Saving...' : 'Save Record'}
+                                onPress={saveRecord}
+                                disabled={isUpdating}
+                            />
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -261,6 +427,8 @@ const styles = StyleSheet.create({
     acceptBtn: { backgroundColor: colors.success },
     rejectBtn: { backgroundColor: colors.error },
     actionBtnText: { color: '#FFF', fontWeight: '600' },
+    recordBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.primary, marginTop: 10 },
+    recordBtnText: { color: '#FFF', fontWeight: '700' },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyTitle: { fontSize: 18, color: colors.textSecondary, marginTop: 12 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -273,6 +441,14 @@ const styles = StyleSheet.create({
     inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
     textInput: { backgroundColor: colors.background, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border },
     textArea: { minHeight: 80, textAlignVertical: 'top' },
+    medicineRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+    medInput: { flex: 1 },
+    addMedBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginTop: 10, alignSelf: 'flex-start' },
+    addMedText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
+    prescriptionItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+    prescriptionInfo: { flex: 1, marginRight: 12 },
+    prescriptionName: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 2 },
+    prescriptionMeta: { fontSize: 12, color: colors.textSecondary },
     datePickerScroll: { marginBottom: 12 },
     datePickerContent: { gap: 10, paddingRight: 20 },
     dateChip: { width: 55, height: 70, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },

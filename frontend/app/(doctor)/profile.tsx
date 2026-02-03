@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,7 @@ const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 export default function DoctorProfile() {
     const router = useRouter();
     const { user, logout } = useAuth();
-    const { doctors, getHospitalById, updateDoctor } = useData();
+    const { doctors, getHospitalById, updateDoctor, osmHospitals, getOsmHospitals, getDoctorHospitals, saveDoctorHospitals, doctorHospitals } = useData();
 
     const doctorProfile = useMemo(() => {
         return doctors.find(d => d.email === user?.email);
@@ -22,6 +22,31 @@ export default function DoctorProfile() {
     const [availableDays, setAvailableDays] = useState<string[]>(doctorProfile?.available_days || []);
     const [fee, setFee] = useState(doctorProfile?.consultation_fee?.toString() || '500');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [showHospitalModal, setShowHospitalModal] = useState(false);
+    const [hospitalSearch, setHospitalSearch] = useState('');
+    const [selectedHospitalIds, setSelectedHospitalIds] = useState<string[]>([]);
+    const [isSavingHospitals, setIsSavingHospitals] = useState(false);
+
+    useEffect(() => {
+        getOsmHospitals();
+    }, []);
+
+    useEffect(() => {
+        if (!doctorProfile?.id) return;
+        getDoctorHospitals(doctorProfile.id).then((items) => {
+            if (items.length > 0) {
+                setSelectedHospitalIds(items.map(h => h.id));
+            }
+        });
+    }, [doctorProfile?.id]);
+
+    useEffect(() => {
+        if (!doctorProfile?.id) return;
+        const existing = doctorHospitals[doctorProfile.id];
+        if (existing && existing.length > 0) {
+            setSelectedHospitalIds(existing.map(h => h.id));
+        }
+    }, [doctorHospitals, doctorProfile?.id]);
 
     const handleToggleDay = async (day: string) => {
         const newDays = availableDays.includes(day)
@@ -51,6 +76,32 @@ export default function DoctorProfile() {
             Alert.alert('Success', 'Consultation fee updated successfully');
         } else {
             Alert.alert('Error', 'Failed to update consultation fee');
+        }
+    };
+
+    const toggleHospitalSelection = (hospitalId: string) => {
+        setSelectedHospitalIds((prev) => {
+            if (prev.includes(hospitalId)) {
+                return prev.filter(id => id !== hospitalId);
+            }
+            return [...prev, hospitalId];
+        });
+    };
+
+    const handleSaveHospitals = async () => {
+        if (!doctorProfile?.id) return;
+        if (selectedHospitalIds.length === 0) {
+            Alert.alert('Select Hospitals', 'Please select at least one hospital.');
+            return;
+        }
+        setIsSavingHospitals(true);
+        const success = await saveDoctorHospitals(doctorProfile.id, selectedHospitalIds);
+        setIsSavingHospitals(false);
+        if (success) {
+            Alert.alert('Saved', 'Your hospital list has been updated.');
+            setShowHospitalModal(false);
+        } else {
+            Alert.alert('Error', 'Could not save hospitals. Please try again.');
         }
     };
 
@@ -194,6 +245,40 @@ export default function DoctorProfile() {
                     </View>
                 )}
 
+                {/* OSM Hospitals */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Works At (Hospitals)</Text>
+                        <TouchableOpacity onPress={() => setShowHospitalModal(true)} style={styles.editHospitalsBtn}>
+                            <Ionicons name="create-outline" size={16} color={colors.doctorPrimary} />
+                            <Text style={styles.editHospitalsText}>Edit</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <Card style={styles.hospitalCard}>
+                        {selectedHospitalIds.length === 0 ? (
+                            <Text style={styles.emptyHospitalsText}>No hospitals selected</Text>
+                        ) : (
+                            selectedHospitalIds.map((id) => {
+                                const hospital = osmHospitals.find(h => h.id === id);
+                                if (!hospital) return null;
+                                return (
+                                    <View key={hospital.id} style={styles.hospitalRow}>
+                                        <View style={styles.hospitalIcon}>
+                                            <Ionicons name="business" size={22} color={colors.hospitalPrimary} />
+                                        </View>
+                                        <View style={styles.hospitalInfo}>
+                                            <Text style={styles.hospitalName}>{hospital.name}</Text>
+                                            <Text style={styles.hospitalAddress}>
+                                                {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                );
+                            })
+                        )}
+                    </Card>
+                </View>
+
                 {/* Logout Button */}
                 <View style={styles.section}>
                     <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -202,6 +287,74 @@ export default function DoctorProfile() {
                     </TouchableOpacity>
                 </View>
             </ScrollView>
+
+            {/* Hospital Selection Modal */}
+            <Modal
+                visible={showHospitalModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowHospitalModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Hospitals</Text>
+                            <TouchableOpacity onPress={() => setShowHospitalModal(false)}>
+                                <Ionicons name="close" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.searchRow}>
+                            <Ionicons name="search" size={18} color={colors.textSecondary} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search hospital..."
+                                value={hospitalSearch}
+                                onChangeText={setHospitalSearch}
+                            />
+                        </View>
+                        <ScrollView style={styles.hospitalList} showsVerticalScrollIndicator={false}>
+                            {osmHospitals
+                                .filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase()))
+                                .map((hospital) => {
+                                    const isSelected = selectedHospitalIds.includes(hospital.id);
+                                    return (
+                                        <TouchableOpacity
+                                            key={hospital.id}
+                                            style={[styles.hospitalSelectRow, isSelected && styles.hospitalSelectRowActive]}
+                                            onPress={() => toggleHospitalSelection(hospital.id)}
+                                        >
+                                            <View style={styles.hospitalSelectInfo}>
+                                                <Text style={[styles.hospitalSelectName, isSelected && styles.hospitalSelectNameActive]}>
+                                                    {hospital.name}
+                                                </Text>
+                                                <Text style={styles.hospitalSelectCoords}>
+                                                    {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                                                </Text>
+                                            </View>
+                                            {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.doctorPrimary} />}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            {osmHospitals.length === 0 && (
+                                <View style={styles.emptyHospitals}>
+                                    <Text style={styles.emptyHospitalsText}>No hospitals available</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                        <TouchableOpacity
+                            style={[styles.saveButton, isSavingHospitals && styles.disabledButton]}
+                            onPress={handleSaveHospitals}
+                            disabled={isSavingHospitals}
+                        >
+                            {isSavingHospitals ? (
+                                <ActivityIndicator color="#FFF" />
+                            ) : (
+                                <Text style={styles.saveButtonText}>Save Hospitals</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -369,6 +522,26 @@ const styles = StyleSheet.create({
         color: colors.text,
         marginBottom: 12,
     },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    editHospitalsBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+        backgroundColor: colors.doctorPrimary + '15',
+    },
+    editHospitalsText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.doctorPrimary,
+    },
     settingCard: {
         padding: 0,
     },
@@ -465,6 +638,10 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: colors.textSecondary,
     },
+    emptyHospitalsText: {
+        fontSize: 13,
+        color: colors.textSecondary,
+    },
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -488,5 +665,91 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: 16,
         color: colors.textSecondary,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+        maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: colors.background,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+        marginBottom: 12,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: colors.text,
+    },
+    hospitalList: {
+        marginBottom: 16,
+    },
+    hospitalSelectRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    hospitalSelectRowActive: {
+        backgroundColor: colors.doctorPrimary + '08',
+    },
+    hospitalSelectInfo: {
+        flex: 1,
+        marginRight: 12,
+    },
+    hospitalSelectName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text,
+        marginBottom: 2,
+    },
+    hospitalSelectNameActive: {
+        color: colors.doctorPrimary,
+    },
+    hospitalSelectCoords: {
+        fontSize: 12,
+        color: colors.textSecondary,
+    },
+    emptyHospitals: {
+        alignItems: 'center',
+        paddingVertical: 20,
+    },
+    saveButton: {
+        backgroundColor: colors.doctorPrimary,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        color: '#FFF',
+        fontSize: 15,
+        fontWeight: '700',
     },
 });

@@ -70,7 +70,7 @@ export default function MyPatients() {
 
     const renderPatient = ({ item }: { item: Patient }) => {
         return (
-            <Card style={styles.patientCard}>
+            <Card style={styles.patientCard} onPress={() => router.push(`/(doctor)/patient/${item.id}`)}>
                 <View style={styles.patientRow}>
                     <View style={styles.avatarContainer}>
                         <View style={styles.avatar}>

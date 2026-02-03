@@ -16,6 +16,7 @@ interface InputProps {
   editable?: boolean;
   style?: ViewStyle;
   icon?: keyof typeof Ionicons.glyphMap;
+  leftIcon?: React.ReactNode;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -32,6 +33,7 @@ export const Input: React.FC<InputProps> = ({
   editable = true,
   style,
   icon,
+  leftIcon,
 }) => {
   const [isSecure, setIsSecure] = useState(secureTextEntry);
   const [isFocused, setIsFocused] = useState(false);
@@ -45,14 +47,17 @@ export const Input: React.FC<InputProps> = ({
         error && styles.errorBorder,
         !editable && styles.disabled,
       ]}>
-        {icon && (
+        {leftIcon && (
+          <View style={styles.icon}>{leftIcon}</View>
+        )}
+        {!leftIcon && icon && (
           <Ionicons name={icon} size={20} color="#666" style={styles.icon} />
         )}
         <TextInput
           style={[
             styles.input,
             multiline && styles.multilineInput,
-            icon && styles.inputWithIcon,
+            (icon || leftIcon) && styles.inputWithIcon,
           ]}
           placeholder={placeholder}
           placeholderTextColor="#9E9E9E"

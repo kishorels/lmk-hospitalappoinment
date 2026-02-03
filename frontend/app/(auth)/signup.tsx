@@ -24,6 +24,31 @@ const SPECIALIZATIONS = [
   'Urologist',
 ];
 
+const HOSPITAL_DEPARTMENTS = [
+  'Emergency',
+  'Cardiology',
+  'Orthopedics',
+  'Neurology',
+  'Pediatrics',
+  'Obstetrics & Gynecology',
+  'Oncology',
+  'Radiology',
+  'Pathology',
+  'Dermatology',
+  'ENT',
+  'Ophthalmology',
+  'Psychiatry',
+  'Urology',
+  'Nephrology',
+  'Gastroenterology',
+  'Pulmonology',
+  'Endocrinology',
+  'General Surgery',
+  'Dental',
+  'Physiotherapy',
+  'ICU',
+];
+
 export default function Signup() {
   const router = useRouter();
   const params = useLocalSearchParams<{ role?: string }>();
@@ -40,7 +65,12 @@ export default function Signup() {
 
   // Hospital fields
   const [address, setAddress] = useState('');
-  const [departments, setDepartments] = useState('');
+  const [area, setArea] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [departmentInput, setDepartmentInput] = useState('');
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
 
   // Doctor fields
   const [specialization, setSpecialization] = useState('');
@@ -62,6 +92,16 @@ export default function Signup() {
 
     if (role === 'hospital') {
       if (!address) newErrors.address = 'Address is required';
+      if (!area) newErrors.area = 'Area is required';
+      if (!city) newErrors.city = 'City is required';
+      if (!state) newErrors.state = 'State is required';
+      if (!pincode) newErrors.pincode = 'Pincode is required';
+      const pendingDepartments = departmentInput
+        .split(',')
+        .map(d => d.trim())
+        .filter(Boolean);
+      const allDepartments = Array.from(new Set([...selectedDepartments, ...pendingDepartments]));
+      if (allDepartments.length === 0) newErrors.departments = 'At least one department is required';
     }
 
     if (role === 'doctor') {
@@ -77,6 +117,12 @@ export default function Signup() {
 
     setLoading(true);
     try {
+      const pendingDepartments = departmentInput
+        .split(',')
+        .map(d => d.trim())
+        .filter(Boolean);
+      const allDepartments = Array.from(new Set([...selectedDepartments, ...pendingDepartments]));
+
       const result = await signup({
         name,
         email,
@@ -86,7 +132,11 @@ export default function Signup() {
         specialization: role === 'doctor' ? specialization : undefined,
         experience: role === 'doctor' ? parseInt(experience) || 0 : undefined,
         address: role === 'hospital' ? address : undefined,
-        departments: role === 'hospital' ? departments.split(',').map(d => d.trim()) : undefined,
+        area: role === 'hospital' ? area : undefined,
+        city: role === 'hospital' ? city : undefined,
+        state: role === 'hospital' ? state : undefined,
+        pincode: role === 'hospital' ? pincode : undefined,
+        departments: role === 'hospital' ? allDepartments : undefined,
       });
 
       if (result.success) {
@@ -125,6 +175,23 @@ export default function Signup() {
     }
   };
 
+  const filteredDepartmentSuggestions = HOSPITAL_DEPARTMENTS.filter((dept) => {
+    const query = departmentInput.split(',').pop()?.trim().toLowerCase() || '';
+    if (!query) return false;
+    if (selectedDepartments.some(d => d.toLowerCase() === dept.toLowerCase())) return false;
+    return dept.toLowerCase().includes(query);
+  });
+
+  const addDepartment = (dept: string) => {
+    if (selectedDepartments.some(d => d.toLowerCase() === dept.toLowerCase())) return;
+    setSelectedDepartments(prev => [...prev, dept]);
+    setDepartmentInput('');
+  };
+
+  const removeDepartment = (dept: string) => {
+    setSelectedDepartments(prev => prev.filter(d => d !== dept));
+  };
+
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView
@@ -151,8 +218,8 @@ export default function Signup() {
           </LinearGradient>
           <View style={styles.form}>
             <Input
-              label="Full Name"
-              placeholder="Enter your name"
+              label={role === 'hospital' ? 'Hospital Name' : 'Full Name'}
+              placeholder={role === 'hospital' ? 'Enter hospital name' : 'Enter your name'}
               value={name}
               onChangeText={setName}
               error={errors.name}
@@ -184,7 +251,7 @@ export default function Signup() {
               <>
                 <Input
                   label="Hospital Address"
-                  placeholder="Enter full address"
+                  placeholder="Street address, building, landmark"
                   value={address}
                   onChangeText={setAddress}
                   error={errors.address}
@@ -192,12 +259,76 @@ export default function Signup() {
                   leftIcon={<Ionicons name="location-outline" size={20} color={colors.textSecondary} />}
                 />
                 <Input
+                  label="Area / Locality"
+                  placeholder="Enter area or locality"
+                  value={area}
+                  onChangeText={setArea}
+                  error={errors.area}
+                  autoCapitalize="words"
+                  leftIcon={<Ionicons name="map-outline" size={20} color={colors.textSecondary} />}
+                />
+                <Input
+                  label="City"
+                  placeholder="Enter city"
+                  value={city}
+                  onChangeText={setCity}
+                  error={errors.city}
+                  autoCapitalize="words"
+                  leftIcon={<Ionicons name="business-outline" size={20} color={colors.textSecondary} />}
+                />
+                <Input
+                  label="State"
+                  placeholder="Enter state"
+                  value={state}
+                  onChangeText={setState}
+                  error={errors.state}
+                  autoCapitalize="words"
+                  leftIcon={<Ionicons name="flag-outline" size={20} color={colors.textSecondary} />}
+                />
+                <Input
+                  label="Pincode"
+                  placeholder="Enter pincode"
+                  value={pincode}
+                  onChangeText={setPincode}
+                  error={errors.pincode}
+                  keyboardType="numeric"
+                  leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
+                />
+                <Input
                   label="Departments"
                   placeholder="e.g., Cardiology, Orthopedics"
-                  value={departments}
-                  onChangeText={setDepartments}
+                  value={departmentInput}
+                  onChangeText={setDepartmentInput}
                   leftIcon={<Ionicons name="list-outline" size={20} color={colors.textSecondary} />}
                 />
+                {errors.departments && <Text style={styles.errorText}>{errors.departments}</Text>}
+                {selectedDepartments.length > 0 && (
+                  <View style={styles.departmentChips}>
+                    {selectedDepartments.map((dept) => (
+                      <TouchableOpacity
+                        key={dept}
+                        style={styles.departmentChip}
+                        onPress={() => removeDepartment(dept)}
+                      >
+                        <Text style={styles.departmentChipText}>{dept}</Text>
+                        <Ionicons name="close" size={14} color={colors.text} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {filteredDepartmentSuggestions.length > 0 && (
+                  <View style={styles.suggestionList}>
+                    {filteredDepartmentSuggestions.map((dept) => (
+                      <TouchableOpacity
+                        key={dept}
+                        style={styles.suggestionItem}
+                        onPress={() => addDepartment(dept)}
+                      >
+                        <Text style={styles.suggestionText}>{dept}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </>
             )}
 
@@ -285,54 +416,72 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerGradient: {
-    paddingBottom: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 16,
-    marginTop: 8,
-  },
-  headerContent: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  roleIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 6,
-  },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
   },
+  headerGradient: {
+    paddingBottom: 32,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 20,
+    marginTop: 12,
+  },
+  headerContent: {
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  roleIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 6,
+    textAlign: 'center',
+  },
   form: {
-    gap: 12,
+    backgroundColor: colors.surface,
     padding: 24,
+    marginHorizontal: 24,
+    marginTop: -20,
+    borderRadius: 24,
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   fieldLabel: {
     fontSize: 14,
@@ -363,6 +512,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.error,
     marginTop: 4,
+  },
+  departmentChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  departmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  departmentChipText: {
+    fontSize: 12,
+    color: colors.text,
+  },
+  suggestionList: {
+    marginTop: 6,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: colors.text,
   },
   signupButton: {
     marginTop: 16,

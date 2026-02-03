@@ -33,6 +33,7 @@ export default function Profile() {
     { icon: 'person-outline', label: 'Edit Profile', onPress: () => { } },
     { icon: 'document-text-outline', label: 'Medical Records', onPress: () => router.push('/(user)/medical-records') },
     { icon: 'calendar-outline', label: 'My Appointments', onPress: () => router.push('/(user)/appointments') },
+    { icon: 'alarm-outline', label: 'Medicine Reminders', onPress: () => router.push('/(user)/reminders') },
     { icon: 'notifications-outline', label: 'Notifications', onPress: () => router.push('/(user)/notifications') },
     { icon: 'shield-checkmark-outline', label: 'Privacy Policy', onPress: () => { } },
     { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => { } },

@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, StatusBar as RNStatusBar } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, StatusBar as RNStatusBar, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { WebView } from 'react-native-webview';
 import { useData, COMMISSION_RATE } from '../../../src/context/DataContext';
 import { useAuth } from '../../../src/context/AuthContext';
 import { Card, Badge, Button } from '../../../src/components';
@@ -13,17 +14,30 @@ export default function DoctorDetail() {
   const router = useRouter();
   const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getDoctorById, getHospitalById, appointments } = useData();
+  const { getDoctorById, getHospitalById, appointments, getDoctorHospitals, doctorHospitals } = useData();
 
   const [reviewText, setReviewText] = useState('');
   const [rating, setRating] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([]);
+  const [mapHospital, setMapHospital] = useState<{ id: string; name: string; latitude: number; longitude: number } | null>(null);
 
   const doctor = getDoctorById(id!);
 
   const hospital = useMemo(() => {
     return doctor?.hospital_id ? getHospitalById(doctor.hospital_id) : null;
   }, [doctor, getHospitalById]);
+
+  useEffect(() => {
+    if (!id) return;
+    getDoctorHospitals(id).then((items) => setDoctorHospitalsList(items));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const existing = doctorHospitals[id];
+    if (existing) setDoctorHospitalsList(existing);
+  }, [doctorHospitals, id]);
 
   const hasCompletedAppointment = useMemo(() => {
     if (!user || !id) return false;
@@ -129,33 +143,60 @@ export default function DoctorDetail() {
           </View>
         </View>
 
-        {/* Hospital */}
-        {hospital && (
+        {/* Hospitals */}
+        {(doctorHospitalsList.length > 0 || hospital) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Works At</Text>
-            <Card
-              onPress={() => router.push(`/(user)/hospitals?id=${hospital.id}`)}
-              style={styles.hospitalCard}
-            >
-              <View style={styles.hospitalRow}>
-                <View style={styles.hospitalIcon}>
-                  <Ionicons name="business" size={24} color={colors.hospitalPrimary} />
-                </View>
-                <View style={styles.hospitalInfo}>
-                  <Text style={styles.hospitalName}>{hospital.name}</Text>
-                  <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.bookHereBtn}
-                  onPress={() => router.push({
-                    pathname: '/(user)/booking',
-                    params: { doctorId: doctor.id, hospitalId: hospital.id }
-                  })}
+            {doctorHospitalsList.length > 0 ? (
+              doctorHospitalsList.map((h) => (
+                <Card key={h.id} style={styles.hospitalCard}>
+                  <View style={styles.hospitalRow}>
+                    <View style={styles.hospitalIcon}>
+                      <Ionicons name="business" size={24} color={colors.hospitalPrimary} />
+                    </View>
+                    <View style={styles.hospitalInfo}>
+                      <Text style={styles.hospitalName}>{h.name}</Text>
+                      <Text style={styles.hospitalAddress}>
+                        {h.latitude.toFixed(4)}, {h.longitude.toFixed(4)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.mapBtn}
+                      onPress={() => setMapHospital(h)}
+                    >
+                      <Ionicons name="map" size={18} color={colors.primary} />
+                      <Text style={styles.mapBtnText}>Map</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              ))
+            ) : (
+              hospital && (
+                <Card
+                  onPress={() => router.push(`/(user)/hospitals?id=${hospital.id}`)}
+                  style={styles.hospitalCard}
                 >
-                  <Text style={styles.bookHereBtnText}>Book</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
+                  <View style={styles.hospitalRow}>
+                    <View style={styles.hospitalIcon}>
+                      <Ionicons name="business" size={24} color={colors.hospitalPrimary} />
+                    </View>
+                    <View style={styles.hospitalInfo}>
+                      <Text style={styles.hospitalName}>{hospital.name}</Text>
+                      <Text style={styles.hospitalAddress}>{hospital.area}, {hospital.city}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.bookHereBtn}
+                      onPress={() => router.push({
+                        pathname: '/(user)/booking',
+                        params: { doctorId: doctor.id, hospitalId: hospital.id }
+                      })}
+                    >
+                      <Text style={styles.bookHereBtnText}>Book</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              )
+            )}
           </View>
         )}
 
@@ -235,6 +276,29 @@ export default function DoctorDetail() {
           />
         </View>
       </ScrollView>
+
+      <Modal
+        visible={!!mapHospital}
+        animationType="slide"
+        onRequestClose={() => setMapHospital(null)}
+      >
+        <SafeAreaView style={styles.mapContainer}>
+          <View style={styles.mapHeader}>
+            <TouchableOpacity onPress={() => setMapHospital(null)} style={styles.backBtn}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.mapTitle}>{mapHospital?.name || 'Hospital Location'}</Text>
+            <View style={{ width: 44 }} />
+          </View>
+          {mapHospital && (
+            <WebView
+              source={{
+                uri: `https://www.openstreetmap.org/?mlat=${mapHospital.latitude}&mlon=${mapHospital.longitude}#map=16/${mapHospital.latitude}/${mapHospital.longitude}`,
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -396,6 +460,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
+  mapBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  mapBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   reviewForm: {
     backgroundColor: colors.surface,
     padding: 16,
@@ -480,6 +558,24 @@ const styles = StyleSheet.create({
   },
   queryBtn: {
     width: '100%',
+  },
+  mapContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  mapTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
   },
   errorState: {
     flex: 1,

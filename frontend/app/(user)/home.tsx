@@ -1,5 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  RefreshControl,
+  Dimensions,
+  ActivityIndicator,
+  Alert,
+  Modal
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,46 +34,118 @@ export default function UserHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [location, setLocation] = useState<{ city: string; area: string } | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
 
   useEffect(() => {
     getLocation();
-    if (user) {
-      getUserAppointments(user.id);
-    }
-  }, [user]);
+  }, []);
+
+  const setFallbackLocation = () => {
+    setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+  };
 
   const getLocation = async () => {
     try {
       setLoadingLocation(true);
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        setFallbackLocation();
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+        // Fallback to default if permission denied
+        setFallbackLocation();
         return;
       }
 
       const loc = await Location.getCurrentPositionAsync({});
-      const [place] = await Location.reverseGeocodeAsync({
+      const [address] = await Location.reverseGeocodeAsync({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
       });
 
-      if (place) {
+      if (address) {
         setLocation({
-          city: place.city || place.district || 'Kanyakumari',
-          area: place.subregion || place.name || 'Nagercoil',
+          city: address.city || 'Kanyakumari',
+          area: address.district || address.name || 'Nagercoil',
         });
       } else {
-        setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+        setFallbackLocation();
       }
     } catch (error) {
-      console.error('Location error:', error);
-      setLocation({ city: 'Kanyakumari', area: 'Nagercoil' });
+      console.warn('Location unavailable, using default.', error);
+      setFallbackLocation();
     } finally {
       setLoadingLocation(false);
     }
   };
 
+  // Get all unique locations from hospitals
+  const allSupportedLocations = useMemo(() => {
+    const locationMap = new Map<string, { city: string; area: string; hospitalCount: number; doctorCount: number }>();
+
+    hospitals.forEach(h => {
+      const key = `${h.area}-${h.city}`;
+      if (locationMap.has(key)) {
+        locationMap.get(key)!.hospitalCount++;
+      } else {
+        locationMap.set(key, { city: h.city, area: h.area, hospitalCount: 1, doctorCount: 0 });
+      }
+    });
+
+    doctors.forEach(d => {
+      const hospital = hospitals.find(h => h.id === d.hospital_id);
+      if (hospital) {
+        const key = `${hospital.area}-${hospital.city}`;
+        if (locationMap.has(key)) {
+          locationMap.get(key)!.doctorCount++;
+        }
+      }
+    });
+
+    return Array.from(locationMap.values());
+  }, [hospitals, doctors]);
+
+  // Filtered list based on search
+  const filteredLocations = useMemo(() => {
+    if (!locationSearch) return allSupportedLocations;
+    return allSupportedLocations.filter(loc =>
+      (loc.city?.toLowerCase() || '').includes(locationSearch.toLowerCase()) ||
+      (loc.area?.toLowerCase() || '').includes(locationSearch.toLowerCase())
+    );
+  }, [allSupportedLocations, locationSearch]);
+
   const filteredDoctors = searchQuery ? searchDoctors(searchQuery) : [];
+
+  const featuredDoctors = useMemo(() => {
+    let result = doctors;
+    if (location) {
+      const hospitalIdsInLocation = hospitals
+        .filter(h =>
+          (h.city?.toLowerCase() || '') === (location.city?.toLowerCase() || '') &&
+          (h.area?.toLowerCase() || '') === (location.area?.toLowerCase() || '')
+        )
+        .map(h => h.id);
+      result = result.filter(d => d.hospital_id && hospitalIdsInLocation.includes(d.hospital_id));
+    }
+    return result.slice(0, 5);
+  }, [doctors, hospitals, location]);
+
+  // Nearby hospitals filtered by location if set
+  const nearbyHospitals = useMemo(() => {
+    let result = hospitals;
+    if (location) {
+      result = result.filter(h =>
+        (h.city?.toLowerCase() || '') === (location.city?.toLowerCase() || '') &&
+        (h.area?.toLowerCase() || '') === (location.area?.toLowerCase() || '')
+      );
+    }
+    return result.slice(0, 5);
+  }, [hospitals, location]);
+
   const upcomingAppointments = appointments.filter(a => a.status === 'accepted' || a.status === 'pending');
 
   const onRefresh = async () => {
@@ -84,63 +168,63 @@ export default function UserHome() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="light" backgroundColor={colors.primary} />
+      <SafeAreaView style={{ backgroundColor: colors.primary }} edges={['top']} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Gradient Header - Goes to the top, content uses SafeAreaView */}
+        {/* Gradient Header */}
         <LinearGradient
           colors={gradients.primary as [string, string]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerGradient}
         >
-          <SafeAreaView edges={['top']}>
-            <View style={styles.headerContent}>
-              <View>
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <View style={styles.greetingRow}>
                 <Text style={styles.greetingSmall}>Welcome back,</Text>
-                <View style={styles.greetingRow}>
-                  <Text style={styles.greeting}>{user?.name || 'User'}</Text>
-                  <Ionicons name="hand-right" size={22} color="#FFF" style={styles.waveIcon} />
-                </View>
-                <TouchableOpacity style={styles.locationRow} onPress={getLocation}>
-                  <Ionicons name="location" size={14} color="rgba(255,255,255,0.9)" />
-                  {loadingLocation ? (
-                    <Text style={styles.locationText}>Getting location...</Text>
-                  ) : (
-                    <Text style={styles.locationText}>{location?.area}, {location?.city}</Text>
-                  )}
-                  <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.7)" />
-                </TouchableOpacity>
+                <Text style={styles.greeting}>{user?.name || 'User'}</Text>
               </View>
+
               <TouchableOpacity
-                style={styles.notificationBtn}
-                onPress={() => router.push('/(user)/notifications')}
+                style={styles.locationRow}
+                onPress={() => setShowLocationModal(true)}
               >
-                <Ionicons name="notifications-outline" size={22} color="#FFF" />
-                {upcomingAppointments.length > 0 && <View style={styles.notificationBadge} />}
+                <Ionicons name="location-sharp" size={16} color="#FFF" />
+                <Text style={styles.locationText} numberOfLines={1}>
+                  {location ? `${location.area}, ${location.city}` : 'Loading location...'}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={styles.notificationBtn}
+              onPress={() => router.push('/(user)/notifications')}
+            >
+              <Ionicons name="notifications-outline" size={22} color="#FFF" />
+              {upcomingAppointments.length > 0 && <View style={styles.notificationBadge} />}
+            </TouchableOpacity>
+          </View>
 
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={colors.textLight} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search doctors, specializations..."
-                placeholderTextColor={colors.textLight}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={20} color={colors.textLight} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </SafeAreaView>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color={colors.textLight} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search doctors, specializations..."
+              placeholderTextColor={colors.textLight}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={colors.textLight} />
+              </TouchableOpacity>
+            )}
+          </View>
         </LinearGradient>
 
         {/* Search Results */}
@@ -235,7 +319,7 @@ export default function UserHome() {
 
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => router.push('/(user)/ai-assistant')}
+              onPress={() => router.push('/(user)/ai-chat')}
             >
               <LinearGradient
                 colors={['#F3E8FF', '#E9D5FF']}
@@ -293,8 +377,8 @@ export default function UserHome() {
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-          {doctors.length > 0 ? (
-            doctors.slice(0, 3).map((doctor) => (
+          {featuredDoctors.length > 0 ? (
+            featuredDoctors.slice(0, 3).map((doctor) => (
               <Card
                 key={doctor.id}
                 onPress={() => router.push(`/(user)/booking?doctorId=${doctor.id}`)}
@@ -328,8 +412,8 @@ export default function UserHome() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="medkit-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No doctors available yet</Text>
-              <Text style={styles.emptySubtext}>Doctors will appear here once they register</Text>
+              <Text style={styles.emptyText}>No doctors available here</Text>
+              <Text style={styles.emptySubtext}>Try changing your location or checking later</Text>
             </View>
           )}
         </View>
@@ -342,8 +426,8 @@ export default function UserHome() {
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-          {hospitals.length > 0 ? (
-            hospitals.slice(0, 2).map((hospital) => (
+          {nearbyHospitals.length > 0 ? (
+            nearbyHospitals.slice(0, 3).map((hospital) => (
               <Card
                 key={hospital.id}
                 onPress={() => router.push(`/(user)/hospitals?id=${hospital.id}`)}
@@ -372,11 +456,154 @@ export default function UserHome() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="business-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No hospitals registered yet</Text>
+              <Text style={styles.emptyText}>No hospitals in your area</Text>
+              <Text style={styles.emptySubtext}>Try selecting a different area</Text>
             </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Location Selection Modal */}
+      <Modal
+        visible={showLocationModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLocationModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Your Location</Text>
+              <TouchableOpacity onPress={() => setShowLocationModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalSearchContainer}>
+              <Ionicons name="search-outline" size={20} color={colors.textLight} />
+              <TextInput
+                style={styles.modalSearchInput}
+                placeholder="Search city or area..."
+                placeholderTextColor={colors.textLight}
+                value={locationSearch}
+                onChangeText={setLocationSearch}
+              />
+            </View>
+
+            <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+              {/* Auto detect option */}
+              <TouchableOpacity
+                style={styles.locationItem}
+                onPress={() => {
+                  getLocation();
+                  setShowLocationModal(false);
+                }}
+              >
+                <View style={styles.locationItemIcon}>
+                  <Ionicons name="navigate-outline" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.locationItemInfo}>
+                  <Text style={styles.locationItemName}>Detect Current Location</Text>
+                  <Text style={styles.locationItemCount}>Using GPS</Text>
+                </View>
+                {loadingLocation && <ActivityIndicator size="small" color={colors.primary} />}
+              </TouchableOpacity>
+
+              {/* Show All option when no search */}
+              {!locationSearch && (
+                <TouchableOpacity
+                  style={[styles.locationItem, !location && styles.locationItemActive]}
+                  onPress={() => {
+                    setLocation(null);
+                    setShowLocationModal(false);
+                  }}
+                >
+                  <View style={styles.locationItemIcon}>
+                    <Ionicons name="apps" size={22} color={!location ? colors.primary : colors.textSecondary} />
+                  </View>
+                  <View style={styles.locationItemInfo}>
+                    <Text style={[styles.locationItemName, !location && styles.locationItemNameActive]}>All Locations</Text>
+                    <Text style={styles.locationItemCount}>
+                      {hospitals.length} hospitals • {doctors.length} doctors
+                    </Text>
+                  </View>
+                  {!location && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                </TouchableOpacity>
+              )}
+
+              {filteredLocations.length > 0 ? (
+                <>
+                  {locationSearch && <Text style={styles.modalSectionTitle}>Search Results</Text>}
+                  {filteredLocations.map((loc, index) => {
+                    const isSelected = location?.area === loc.area && location?.city === loc.city;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.locationItem, isSelected && styles.locationItemActive]}
+                        onPress={() => {
+                          setLocation({ city: loc.city, area: loc.area });
+                          setShowLocationModal(false);
+                          setLocationSearch('');
+                        }}
+                      >
+                        <View style={styles.locationItemIcon}>
+                          <Ionicons name="location" size={22} color={isSelected ? colors.primary : colors.textSecondary} />
+                        </View>
+                        <View style={styles.locationItemInfo}>
+                          <Text style={[styles.locationItemName, isSelected && styles.locationItemNameActive]}>
+                            {loc.area}
+                          </Text>
+                          <Text style={styles.locationItemCity}>{loc.city}</Text>
+                          <Text style={styles.locationItemCount}>
+                            {loc.hospitalCount} hospitals • {loc.doctorCount} doctors
+                          </Text>
+                        </View>
+                        {isSelected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
+              ) : (
+                <>
+                  <View style={styles.noLocationsFound}>
+                    <Ionicons name="search-outline" size={48} color={colors.textLight} />
+                    <Text style={styles.noLocationsText}>No matches for "{locationSearch}"</Text>
+                  </View>
+                  <Text style={styles.modalSectionTitle}>Currently Served Areas</Text>
+                  {allSupportedLocations.map((loc, index) => {
+                    const isSelected = location?.area === loc.area && location?.city === loc.city;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.locationItem, isSelected && styles.locationItemActive]}
+                        onPress={() => {
+                          setLocation({ city: loc.city, area: loc.area });
+                          setShowLocationModal(false);
+                          setLocationSearch('');
+                        }}
+                      >
+                        <View style={styles.locationItemIcon}>
+                          <Ionicons name="location" size={22} color={isSelected ? colors.primary : colors.textSecondary} />
+                        </View>
+                        <View style={styles.locationItemInfo}>
+                          <Text style={[styles.locationItemName, isSelected && styles.locationItemNameActive]}>
+                            {loc.area}
+                          </Text>
+                          <Text style={styles.locationItemCity}>{loc.city}</Text>
+                          <Text style={styles.locationItemCount}>
+                            {loc.hospitalCount} hospitals • {loc.doctorCount} doctors
+                          </Text>
+                        </View>
+                        {isSelected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -413,6 +640,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 20,
   },
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
   greetingSmall: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
@@ -439,40 +670,49 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     marginTop: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '85%',
   },
   locationText: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.95)',
-    fontWeight: '500',
+    color: '#FFF',
+    fontWeight: '600',
   },
   notificationBtn: {
     width: 44,
     height: 44,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 22,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   notificationBadge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 12,
+    right: 12,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF4757',
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    paddingHorizontal: 16,
     borderRadius: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 14,
+    marginLeft: 10,
     fontSize: 15,
     color: colors.text,
   },
@@ -492,22 +732,23 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   seeAll: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.primary,
     fontWeight: '600',
   },
   searchResultCard: {
-    marginBottom: 8,
+    marginBottom: 10,
+    padding: 12,
   },
   searchResultRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   doctorAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primaryLight,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -521,12 +762,13 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   doctorSpec: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2,
   },
   appointmentCard: {
     padding: 16,
+    backgroundColor: colors.primary,
+    borderWidth: 0,
   },
   appointmentHeader: {
     flexDirection: 'row',
@@ -534,75 +776,80 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   appointmentDoctor: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
     marginBottom: 4,
   },
   appointmentDate: {
     fontSize: 14,
-    color: colors.text,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 2,
   },
   appointmentTime: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
   },
   servicesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 12,
-    marginTop: 12,
   },
   serviceCard: {
     width: (width - 52) / 2,
     backgroundColor: colors.surface,
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   serviceIconBg: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
   serviceTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   serviceCount: {
     fontSize: 12,
     color: colors.textSecondary,
   },
   categoriesScroll: {
-    marginTop: 12,
+    marginLeft: -20,
+    marginRight: -20,
+    paddingHorizontal: 20,
   },
   categoryChip: {
-    flexDirection: 'row',
+    marginRight: 12,
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    marginRight: 10,
-    gap: 8,
+    width: 80,
   },
   categoryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 8,
   },
   categoryName: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
     color: colors.text,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   doctorCard: {
     marginBottom: 12,
@@ -612,10 +859,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   doctorAvatarLarge: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: colors.primaryLight,
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
@@ -625,18 +872,17 @@ const styles = StyleSheet.create({
   },
   doctorNameLarge: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
+    marginBottom: 2,
   },
   doctorSpecLarge: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginBottom: 4,
   },
   doctorMeta: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
     gap: 12,
   },
   metaItem: {
@@ -721,7 +967,124 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textLight,
     marginTop: 4,
+    textAlign: 'center',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    marginHorizontal: 20,
+    marginVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  modalSearchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.text,
+  },
+  modalList: {
+    paddingHorizontal: 20,
+  },
+  locationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 10,
+    gap: 14,
+  },
+  locationItemActive: {
+    backgroundColor: colors.primary + '10',
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  locationItemIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  locationItemInfo: {
+    flex: 1,
+  },
+  locationItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  locationItemNameActive: {
+    color: colors.primary,
+  },
+  locationItemCity: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  locationItemCount: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
+  },
+  modalSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textLight,
+    marginTop: 16,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginLeft: 4,
+  },
+  noLocationsFound: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 12,
+  },
+  noLocationsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });

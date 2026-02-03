@@ -79,6 +79,32 @@ export default function Appointments() {
           )}
         </View>
 
+        {(item.patient_complaint || item.diagnosis || (item.prescription && item.prescription.length > 0) || item.record_notes) && (
+          <View style={styles.recordSection}>
+            <Text style={styles.recordTitle}>Doctor Record</Text>
+            <Text style={styles.recordLabel}>Complaint</Text>
+            <Text style={styles.recordText}>{item.patient_complaint || '—'}</Text>
+            <Text style={styles.recordLabel}>Diagnosis</Text>
+            <Text style={styles.recordText}>{item.diagnosis || '—'}</Text>
+            <Text style={styles.recordLabel}>Notes</Text>
+            <Text style={styles.recordText}>{item.record_notes || '—'}</Text>
+
+            <Text style={styles.recordLabel}>Prescription</Text>
+            {(item.prescription && item.prescription.length > 0) ? (
+              item.prescription.map((med, idx) => (
+                <View key={`${item.id}-med-${idx}`} style={styles.medRow}>
+                  <Text style={styles.medName}>{med.name}</Text>
+                  <Text style={styles.medMeta}>
+                    {med.dosage || 'Dose'} • {med.instructions || 'Instructions'} • {med.days ? `${med.days} days` : 'Days'}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.recordText}>—</Text>
+            )}
+          </View>
+        )}
+
         {item.status === 'rejected' && item.suggested_date && (
           <View style={styles.rescheduleSection}>
             <View style={styles.rescheduleHeader}>
@@ -239,6 +265,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFF',
+  },
+  recordSection: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  recordTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  recordLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginTop: 6,
+  },
+  recordText: {
+    fontSize: 13,
+    color: colors.text,
+    marginTop: 2,
+  },
+  medRow: {
+    marginTop: 6,
+  },
+  medName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  medMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   emptyState: {
     flex: 1,

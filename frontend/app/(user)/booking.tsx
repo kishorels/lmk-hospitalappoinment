@@ -19,7 +19,7 @@ export default function Booking() {
     preselectTime?: string
   }>();
   const { user } = useAuth();
-  const { getDoctorById, createAppointment, isLoading: dataLoading } = useData();
+  const { getDoctorById, createAppointment, isLoading: dataLoading, getDoctorHospitals, doctorHospitals } = useData();
 
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointmentType, setAppointmentType] = useState<'in-person' | 'video'>('in-person');
@@ -28,6 +28,8 @@ export default function Booking() {
   );
   const [selectedTime, setSelectedTime] = useState<string | null>(preselectTime || null);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
 
   useEffect(() => {
     if (doctorId) {
@@ -35,6 +37,27 @@ export default function Booking() {
       if (d) setDoctor(d);
     }
   }, [doctorId, dataLoading]);
+
+  useEffect(() => {
+    if (!doctorId) return;
+    getDoctorHospitals(doctorId).then((items) => {
+      setDoctorHospitalsList(items);
+      if (items.length > 0) {
+        setSelectedHospitalId(items[0].id);
+      }
+    });
+  }, [doctorId]);
+
+  useEffect(() => {
+    if (!doctorId) return;
+    const existing = doctorHospitals[doctorId];
+    if (existing) {
+      setDoctorHospitalsList(existing);
+      if (!selectedHospitalId && existing.length > 0) {
+        setSelectedHospitalId(existing[0].id);
+      }
+    }
+  }, [doctorHospitals, doctorId]);
 
   if (dataLoading && !doctor) {
     return (
@@ -62,7 +85,7 @@ export default function Booking() {
   // Filter dates by doctor availability
   const availableDates = dates.filter(date => {
     const dayName = format(date, 'EEEE');
-    return doctor.available_days.includes(dayName);
+    return (doctor.available_days || []).includes(dayName);
   });
 
   const handleBook = async () => {
@@ -71,6 +94,8 @@ export default function Booking() {
       return;
     }
 
+    const selectedHospital = doctorHospitalsList.find(h => h.id === selectedHospitalId);
+
     setBookingLoading(true);
     try {
       const appointment = await createAppointment({
@@ -78,8 +103,8 @@ export default function Booking() {
         user_name: user.name,
         doctor_id: doctor.id,
         doctor_name: doctor.name,
-        hospital_id: doctor.hospital_id,
-        hospital_name: doctor.hospital_name,
+        hospital_id: selectedHospital?.id || doctor.hospital_id,
+        hospital_name: selectedHospital?.name || doctor.hospital_name,
         date: selectedDate.toISOString().split('T')[0],
         time_slot: selectedTime,
         type: appointmentType,
@@ -159,6 +184,36 @@ export default function Booking() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Hospital Selection */}
+        {doctorHospitalsList.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Choose Hospital</Text>
+            {doctorHospitalsList.map((hospital) => {
+              const isSelected = selectedHospitalId === hospital.id;
+              return (
+                <TouchableOpacity
+                  key={hospital.id}
+                  style={[styles.hospitalSelectCard, isSelected && styles.hospitalSelectCardActive]}
+                  onPress={() => setSelectedHospitalId(hospital.id)}
+                >
+                  <View style={styles.hospitalSelectRow}>
+                    <View style={styles.hospitalSelectIcon}>
+                      <Ionicons name="business" size={20} color={colors.hospitalPrimary} />
+                    </View>
+                    <View style={styles.hospitalSelectInfo}>
+                      <Text style={[styles.hospitalSelectName, isSelected && styles.hospitalSelectNameActive]}>{hospital.name}</Text>
+                      <Text style={styles.hospitalSelectCoords}>
+                        {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Date Selection */}
         <View style={styles.section}>
@@ -307,6 +362,47 @@ const styles = StyleSheet.create({
   },
   hospitalName: {
     fontSize: 13,
+    color: colors.textSecondary,
+  },
+  hospitalSelectCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+  },
+  hospitalSelectCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '08',
+  },
+  hospitalSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hospitalSelectIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.hospitalPrimary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  hospitalSelectInfo: {
+    flex: 1,
+  },
+  hospitalSelectName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  hospitalSelectNameActive: {
+    color: colors.primary,
+  },
+  hospitalSelectCoords: {
+    fontSize: 12,
     color: colors.textSecondary,
   },
   section: {

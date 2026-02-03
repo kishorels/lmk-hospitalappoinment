@@ -87,35 +87,45 @@ export default function Login() {
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
               </TouchableOpacity>
               <View style={styles.headerContent}>
-                <Ionicons name="log-in-outline" size={48} color="#FFF" />
+                <View style={styles.logoIconContainer}>
+                  <Ionicons name="medical" size={40} color="#FFF" />
+                </View>
                 <Text style={styles.title}>Welcome Back</Text>
-                <Text style={styles.subtitle}>Sign in to continue to MedBook</Text>
+                <Text style={styles.subtitle}>Sign in to access your healthcare portal</Text>
               </View>
             </SafeAreaView>
           </LinearGradient>
 
           <View style={styles.formContainer}>
             <View style={styles.form}>
-              <Input
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                error={errors.email}
-                icon="mail-outline"
-              />
+              <View style={styles.inputGroup}>
+                <Input
+                  label="Email Address"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="name@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  error={errors.email}
+                  icon="mail-outline"
+                />
+              </View>
 
-              <Input
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                secureTextEntry
-                error={errors.password}
-                icon="lock-closed-outline"
-              />
+              <View style={styles.inputGroup}>
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  secureTextEntry
+                  error={errors.password}
+                  icon="lock-closed-outline"
+                />
+              </View>
+
+              <TouchableOpacity style={styles.forgotPassword}>
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
 
               <Button
                 title={loading ? 'Signing in...' : 'Sign In'}
@@ -127,7 +137,7 @@ export default function Login() {
 
               <View style={styles.divider}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
+                <Text style={styles.dividerText}>or continue with</Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -136,7 +146,7 @@ export default function Login() {
                 onPress={() => router.push('/(auth)/signup')}
               >
                 <Text style={styles.signupText}>
-                  Don't have an account? <Text style={styles.signupTextBold}>Sign Up</Text>
+                  New to MedBook? <Text style={styles.signupTextBold}>Create Account</Text>
                 </Text>
               </TouchableOpacity>
             </View>
@@ -152,57 +162,96 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  headerGradient: {
-    paddingBottom: 32,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
-  formContainer: {
-    padding: 24,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 16,
-    marginTop: 8,
-  },
-  headerContent: {
-    alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFF',
-    marginTop: 16,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 8,
-  },
   keyboardView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
+  },
+  headerGradient: {
+    paddingBottom: 40,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 20,
+    marginTop: 12,
+  },
+  headerContent: {
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  logoIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: 28,
+    marginTop: -24,
   },
   form: {
-    gap: 16,
+    backgroundColor: colors.surface,
+    padding: 24,
+    borderRadius: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  inputGroup: {
+    marginBottom: 4,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  forgotPasswordText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   loginButton: {
-    marginTop: 8,
+    marginVertical: 8,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   dividerLine: {
     flex: 1,
@@ -211,12 +260,13 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     paddingHorizontal: 16,
-    color: colors.textSecondary,
-    fontSize: 14,
+    color: colors.textLight,
+    fontSize: 13,
+    textTransform: 'lowercase',
   },
   signupLink: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   signupText: {
     fontSize: 15,
@@ -224,6 +274,6 @@ const styles = StyleSheet.create({
   },
   signupTextBold: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

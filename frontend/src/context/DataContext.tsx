@@ -9,11 +9,26 @@ export interface Hospital {
   address: string;
   city: string;
   area: string;
+  state?: string;
+  pincode?: string;
   phone: string;
   email: string;
   departments: string[];
   rating: number;
   image_url?: string;
+}
+
+export interface OSMHospital {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  locality?: string;
+  street?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  postcode?: string;
 }
 
 export interface Doctor {
@@ -49,7 +64,12 @@ export interface Appointment {
   suggested_date?: string;
   suggested_time?: string;
   doctor_note?: string;
+  patient_complaint?: string;
+  diagnosis?: string;
+  prescription?: { name: string; dosage?: string; instructions?: string; days?: number }[];
+  record_notes?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 // Disease Categories (static, for UI only)
@@ -66,6 +86,9 @@ export const DISEASE_CATEGORIES = [
 
 interface DataContextType {
   hospitals: Hospital[];
+  osmHospitals: OSMHospital[];
+  doctorHospitals: Record<string, OSMHospital[]>;
+  hospitalDoctors: Record<string, Doctor[]>;
   doctors: Doctor[];
   appointments: Appointment[];
   isLoading: boolean;
@@ -73,6 +96,10 @@ interface DataContextType {
   // Hospital actions
   getHospitals: () => Promise<void>;
   getHospitalById: (id: string) => Hospital | undefined;
+  getOsmHospitals: () => Promise<void>;
+  getDoctorHospitals: (doctorId: string) => Promise<OSMHospital[]>;
+  saveDoctorHospitals: (doctorId: string, hospitalIds: string[]) => Promise<boolean>;
+  getDoctorsForHospital: (hospitalId: string) => Promise<Doctor[]>;
   // Doctor actions
   getDoctors: (specialization?: string) => Promise<void>;
   getDoctorById: (id: string) => Doctor | undefined;
@@ -81,10 +108,30 @@ interface DataContextType {
   getUserAppointments: (userId: string) => Promise<void>;
   getDoctorAppointments: (doctorId: string) => Promise<void>;
   updateAppointmentStatus: (id: string, status: string, suggestion?: { date?: string; time?: string; note?: string }) => Promise<boolean>;
+  updateAppointmentRecord: (id: string, data: {
+    doctor_id: string;
+    patient_complaint?: string;
+    diagnosis?: string;
+    prescription?: { name: string; dosage?: string; instructions?: string; days?: number }[];
+    record_notes?: string;
+  }) => Promise<Appointment | null>;
+  getPatientTimeline: (doctorId: string, patientId: string) => Promise<Appointment[]>;
   // Search
   searchDoctors: (query: string) => Doctor[];
   getDoctorsBySpecialization: (specializations: string[]) => Doctor[];
   updateDoctor: (id: string, data: Partial<Doctor>) => Promise<boolean>;
+  createReminder: (data: {
+    user_id: string;
+    medicine_name: string;
+    before_after: string;
+    times: string[];
+    start_date: string;
+    end_date: string;
+    tz_offset_minutes: number;
+  }) => Promise<boolean>;
+  getUserReminders: (userId: string) => Promise<any[]>;
+  deleteReminder: (reminderId: string) => Promise<boolean>;
+  toggleReminder: (reminderId: string, active: boolean) => Promise<boolean>;
 }
 
 export const COMMISSION_RATE = 0.1; // 10%
@@ -93,6 +140,9 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [osmHospitals, setOsmHospitals] = useState<OSMHospital[]>([]);
+  const [doctorHospitals, setDoctorHospitals] = useState<Record<string, OSMHospital[]>>({});
+  const [hospitalDoctors, setHospitalDoctors] = useState<Record<string, Doctor[]>>({});
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,7 +154,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshData = async () => {
     setIsLoading(true);
     try {
-      await Promise.all([getHospitals(), getDoctors()]);
+      await Promise.all([getHospitals(), getDoctors(), getOsmHospitals()]);
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
@@ -122,6 +172,160 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Error fetching hospitals:', error);
     }
+  };
+
+  const getOsmHospitals = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/osm-hospitals`);
+      if (response.ok) {
+        const data = await response.json();
+        setOsmHospitals(data);
+      }
+    } catch (error) {
+      console.error('Error fetching OSM hospitals:', error);
+    }
+  };
+
+  const getDoctorHospitals = async (doctorId: string) => {
+    if (!doctorId) return [];
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/doctor-hospitals/${doctorId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDoctorHospitals(prev => ({ ...prev, [doctorId]: data }));
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching doctor hospitals:', error);
+    }
+    return [];
+  };
+
+  const saveDoctorHospitals = async (doctorId: string, hospitalIds: string[]) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/doctor-hospitals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doctor_id: doctorId, hospital_ids: hospitalIds }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const selected = osmHospitals.filter(h => data.hospital_ids.includes(h.id));
+        setDoctorHospitals(prev => ({ ...prev, [doctorId]: selected }));
+        return true;
+      }
+    } catch (error) {
+      console.error('Error saving doctor hospitals:', error);
+    }
+    return false;
+  };
+
+  const updateAppointmentRecord = async (id: string, data: {
+    doctor_id: string;
+    patient_complaint?: string;
+    diagnosis?: string;
+    prescription?: { name: string; dosage?: string; instructions?: string; days?: number }[];
+    record_notes?: string;
+  }) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/${id}/record`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setAppointments(prev => prev.map(a => a.id === id ? updated : a));
+        return updated;
+      }
+    } catch (error) {
+      console.error('Error updating appointment record:', error);
+    }
+    return null;
+  };
+
+  const getPatientTimeline = async (doctorId: string, patientId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/patients/${doctorId}/${patientId}/timeline`);
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching patient timeline:', error);
+    }
+    return [];
+  };
+
+  const createReminder = async (data: {
+    user_id: string;
+    medicine_name: string;
+    before_after: string;
+    times: string[];
+    start_date: string;
+    end_date: string;
+    tz_offset_minutes: number;
+  }) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/reminders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Error creating reminder:', error);
+      return false;
+    }
+  };
+
+  const getUserReminders = async (userId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/reminders/user/${userId}`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('Error fetching reminders:', error);
+    }
+    return [];
+  };
+
+  const deleteReminder = async (reminderId: string) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/reminders/${reminderId}`, { method: 'DELETE' });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+      return false;
+    }
+  };
+
+  const toggleReminder = async (reminderId: string, active: boolean) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/reminders/${reminderId}/toggle?active=${active}`, {
+        method: 'PUT',
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Error toggling reminder:', error);
+      return false;
+    }
+  };
+
+  const getDoctorsForHospital = async (hospitalId: string) => {
+    if (!hospitalId) return [];
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/hospital-doctors/${hospitalId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setHospitalDoctors(prev => ({ ...prev, [hospitalId]: data }));
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching hospital doctors:', error);
+    }
+    return [];
   };
 
   const getHospitalById = (id: string) => hospitals.find(h => h.id === id);
@@ -219,14 +423,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const searchDoctors = (query: string) => {
     const lowerQuery = query.toLowerCase();
     return doctors.filter(d =>
-      d.name.toLowerCase().includes(lowerQuery) ||
-      d.specialization.toLowerCase().includes(lowerQuery)
+      (d.name?.toLowerCase() || '').includes(lowerQuery) ||
+      (d.specialization?.toLowerCase() || '').includes(lowerQuery)
     );
   };
 
   const getDoctorsBySpecialization = (specializations: string[]) => {
     return doctors.filter(d =>
-      specializations.some(s => d.specialization.toLowerCase().includes(s.toLowerCase()))
+      specializations.some(s => (d.specialization?.toLowerCase() || '').includes(s?.toLowerCase() || ''))
     );
   };
 
@@ -251,12 +455,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <DataContext.Provider value={{
       hospitals,
+      osmHospitals,
+      doctorHospitals,
+      hospitalDoctors,
       doctors,
       appointments,
       isLoading,
       refreshData,
       getHospitals,
       getHospitalById,
+      getOsmHospitals,
+      getDoctorHospitals,
+      saveDoctorHospitals,
+      getDoctorsForHospital,
       getDoctors,
       getDoctorById,
       createAppointment,
@@ -266,6 +477,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       searchDoctors,
       getDoctorsBySpecialization,
       updateDoctor,
+      updateAppointmentRecord,
+      getPatientTimeline,
+      createReminder,
+      getUserReminders,
+      deleteReminder,
+      toggleReminder,
     }}>
       {children}
     </DataContext.Provider>

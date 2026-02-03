@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform, Animated, Text, TouchableWithoutFeedback } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform, Animated, Text, TouchableWithoutFeedback, Modal, ScrollView } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../src/theme/colors';
+import { HEALTH_TIPS } from '../../src/data/healthAI';
 
 export default function UserLayout() {
   const insets = useSafeAreaInsets();
@@ -13,6 +14,7 @@ export default function UserLayout() {
   const tabBarHeight = 60 + insets.bottom;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showHealthTips, setShowHealthTips] = useState(false);
   const animation = useRef(new Animated.Value(0)).current;
 
   const toggleMenu = () => {
@@ -29,6 +31,12 @@ export default function UserLayout() {
     setIsMenuOpen(false);
     animation.setValue(0);
     router.push(path as any);
+  };
+
+  const openHealthTips = () => {
+    setIsMenuOpen(false);
+    animation.setValue(0);
+    setShowHealthTips(true);
   };
 
   const subMenuTranslateYTop = animation.interpolate({
@@ -233,7 +241,7 @@ export default function UserLayout() {
             opacity: subMenuOpacity
           }
         ]}>
-          <TouchableOpacity style={styles.subMenuBtn} onPress={() => navTo('/(user)/ai-assistant?screen=home&section=tips')} activeOpacity={0.9}>
+          <TouchableOpacity style={styles.subMenuBtn} onPress={openHealthTips} activeOpacity={0.9}>
             <View style={styles.labelContainer}>
               <Text style={styles.subMenuLabelText}>Health Tips</Text>
             </View>
@@ -282,6 +290,43 @@ export default function UserLayout() {
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* Health Tips Modal */}
+      <Modal
+        visible={showHealthTips}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowHealthTips(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <View style={styles.modalIconBg}>
+                  <Ionicons name="bulb" size={24} color="#10B981" />
+                </View>
+                <Text style={styles.modalTitle}>Daily Health Tips</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowHealthTips(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.tipsScrollView} showsVerticalScrollIndicator={false}>
+              {HEALTH_TIPS.map((tip, index) => (
+                <View key={tip.id} style={styles.tipCard}>
+                  <View style={styles.tipIconContainer}>
+                    <Ionicons name={tip.icon as any} size={22} color={colors.primary} />
+                  </View>
+                  <View style={styles.tipContent}>
+                    <Text style={styles.tipTitle}>{tip.title}</Text>
+                    <Text style={styles.tipText}>{tip.tip}</Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -350,5 +395,85 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+  },
+  // Health Tips Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#10B98120',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipsScrollView: {
+    padding: 20,
+  },
+  tipCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    gap: 14,
+  },
+  tipIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipContent: {
+    flex: 1,
+  },
+  tipTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  tipText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 });

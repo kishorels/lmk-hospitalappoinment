@@ -48,6 +48,15 @@ export default function DoctorLayout() {
                 }}
             />
             <Tabs.Screen
+                name="patients"
+                options={{
+                    title: 'Patients',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="people" size={size} color={color} />
+                    ),
+                }}
+            />
+            <Tabs.Screen
                 name="queries"
                 options={{
                     title: 'Queries',

@@ -1,81 +1,112 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../src/context/AuthContext';
-import { useData, Hospital } from '../../src/context/DataContext';
+import { WebView } from 'react-native-webview';
+import { useData, OSMHospital } from '../../src/context/DataContext';
 import { Card } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
 export default function Hospitals() {
   const router = useRouter();
-  const { hospitals, isLoading } = useData();
+  const { osmHospitals, isLoading } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [localityQuery, setLocalityQuery] = useState('');
+  const [mapHospital, setMapHospital] = useState<OSMHospital | null>(null);
+  const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, any>>({});
 
-  const filteredHospitals = searchQuery
-    ? hospitals.filter(h =>
-      h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      h.departments.some(d => d.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-    : hospitals;
+  const filteredHospitals = useMemo(() => {
+    let list = osmHospitals;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(h => (h.name || '').toLowerCase().includes(q));
+    }
+    if (localityQuery) {
+      const lq = localityQuery.toLowerCase();
+      list = list.filter(h => {
+        const locality = (h.locality || '').toLowerCase();
+        if (locality) return locality.includes(lq);
+        return (h.name || '').toLowerCase().includes(lq);
+      });
+    }
+    return list;
+  }, [osmHospitals, searchQuery, localityQuery]);
 
-  const renderHospital = ({ item }: { item: Hospital }) => {
+  const renderHospital = ({ item }: { item: OSMHospital }) => {
+    const addressSource = resolvedAddresses[item.id] || item;
     return (
-      <Card
-        onPress={() => router.push(`/(user)/hospitals?id=${item.id}`)}
-        style={styles.hospitalCard}
-        elevation="medium"
-      >
+      <Card style={styles.hospitalCard} elevation="medium">
         <View style={styles.hospitalHeader}>
           <View style={styles.hospitalIcon}>
             <Ionicons name="business-outline" size={32} color={colors.primary} />
           </View>
           <View style={styles.headerInfo}>
             <Text style={styles.hospitalName}>{item.name}</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color="#FFB800" />
-              <Text style={styles.ratingText}>{item.rating?.toFixed(1) || '4.0'}</Text>
-            </View>
+            {addressSource?.street ? (
+              <Text style={styles.localityText}>{addressSource.street}</Text>
+            ) : null}
+            {(addressSource?.city || addressSource?.district || addressSource?.state || addressSource?.postcode) ? (
+              <Text style={styles.coordsText}>
+                {[addressSource?.city, addressSource?.district, addressSource?.state, addressSource?.postcode].filter(Boolean).join(', ')}
+              </Text>
+            ) : (
+              addressSource?.locality ? <Text style={styles.coordsText}>{addressSource.locality}</Text> : null
+            )}
           </View>
-        </View>
-
-        <View style={styles.addressRow}>
-          <Ionicons name="location-outline" size={16} color={colors.textLight} />
-          <Text style={styles.addressText}>{item.address}</Text>
-        </View>
-        <Text style={styles.areaText}>{item.area}, {item.city}</Text>
-
-        <View style={styles.departmentsContainer}>
-          {item.departments.slice(0, 3).map((dept, index) => (
-            <View key={index} style={styles.deptChip}>
-              <Text style={styles.deptText}>{dept}</Text>
-            </View>
-          ))}
-          {item.departments.length > 3 && (
-            <View style={styles.deptChip}>
-              <Text style={styles.deptText}>+{item.departments.length - 3}</Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.footer}>
-          <View style={styles.footerItem}>
-            <Ionicons name="layers-outline" size={18} color={colors.primary} />
-            <Text style={styles.footerText}>{item.departments.length} Departments</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.viewDoctorsBtn}
+            onPress={() => router.push(`/(user)/osm-hospital/${item.id}`)}
+          >
+            <Ionicons name="people" size={18} color={colors.primary} />
+            <Text style={styles.viewDoctorsText}>View Doctors</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.viewBtn}
-            onPress={() => router.push(`/(user)/hospitals?id=${item.id}`)}
+            onPress={() => setMapHospital(item)}
           >
-            <Text style={styles.viewBtnText}>Details</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            <Ionicons name="map" size={18} color={colors.primary} />
+            <Text style={styles.viewBtnText}>View on Map</Text>
           </TouchableOpacity>
         </View>
       </Card>
     );
   };
+
+  useEffect(() => {
+    if (filteredHospitals.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      const needs = filteredHospitals.filter(h => !h.street && !h.city && !h.district && !h.state && !h.postcode).slice(0, 20);
+      if (needs.length === 0) return;
+      const entries = await Promise.all(
+        needs.map(async (h) => {
+          try {
+            const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/osm-hospitals/${h.id}/reverse`);
+            if (res.ok) {
+              const data = await res.json();
+              return [h.id, data] as const;
+            }
+          } catch {}
+          return [h.id, null] as const;
+        })
+      );
+      if (!cancelled) {
+        const next: Record<string, any> = {};
+        for (const [id, data] of entries) {
+          if (data) next[id] = data;
+        }
+        setResolvedAddresses(prev => ({ ...prev, ...next }));
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [filteredHospitals]);
 
   if (isLoading) {
     return (
@@ -87,11 +118,12 @@ export default function Hospitals() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="dark" backgroundColor={colors.background} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Hospitals</Text>
+        <Text style={styles.title}>Hospitals (OSM)</Text>
         <View style={{ width: 44 }} />
       </View>
 
@@ -99,13 +131,28 @@ export default function Hospitals() {
         <Ionicons name="search-outline" size={20} color={colors.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search hospitals, departments..."
+          placeholder="Search hospitals..."
           placeholderTextColor={colors.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={styles.searchContainer}>
+        <Ionicons name="location-outline" size={20} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Filter by locality..."
+          placeholderTextColor={colors.textLight}
+          value={localityQuery}
+          onChangeText={setLocalityQuery}
+        />
+        {localityQuery && (
+          <TouchableOpacity onPress={() => setLocalityQuery('')}>
             <Ionicons name="close-circle" size={20} color={colors.textLight} />
           </TouchableOpacity>
         )}
@@ -123,9 +170,36 @@ export default function Hospitals() {
         <View style={styles.emptyState}>
           <Ionicons name="business-outline" size={64} color={colors.textLight} />
           <Text style={styles.emptyTitle}>No hospitals found</Text>
-          <Text style={styles.emptyText}>Hospitals will appear here once they register</Text>
+          <Text style={styles.emptyText}>Try a different search term or add a hospital.</Text>
+          <TouchableOpacity style={styles.addHospitalBtn} onPress={() => router.push('/(hospital)/profile')}>
+            <Ionicons name="add-circle" size={18} color="#FFF" />
+            <Text style={styles.addHospitalBtnText}>Add Hospital</Text>
+          </TouchableOpacity>
         </View>
       )}
+
+      <Modal
+        visible={!!mapHospital}
+        animationType="slide"
+        onRequestClose={() => setMapHospital(null)}
+      >
+        <SafeAreaView style={styles.mapContainer}>
+          <View style={styles.mapHeader}>
+            <TouchableOpacity onPress={() => setMapHospital(null)} style={styles.backBtn}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.mapTitle}>{mapHospital?.name || 'Hospital Location'}</Text>
+            <View style={{ width: 44 }} />
+          </View>
+          {mapHospital && (
+            <WebView
+              source={{
+                uri: `https://www.openstreetmap.org/?mlat=${mapHospital.latitude}&mlon=${mapHospital.longitude}#map=16/${mapHospital.latitude}/${mapHospital.longitude}`,
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -206,74 +280,37 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 4,
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginBottom: 4,
-  },
-  addressText: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  areaText: {
+  coordsText: {
     fontSize: 13,
-    color: colors.textLight,
-    marginBottom: 12,
-    marginLeft: 22,
+    color: colors.textSecondary,
   },
-  departmentsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  deptChip: {
-    backgroundColor: colors.primary + '08',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary + '20',
-  },
-  deptText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
+  localityText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  footerItem: {
+  viewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  footerText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  viewBtn: {
+  viewDoctorsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+  },
+  viewDoctorsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   viewBtnText: {
     fontSize: 14,
@@ -298,5 +335,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  addHospitalBtn: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  addHospitalBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  mapContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  mapTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
   },
 });
