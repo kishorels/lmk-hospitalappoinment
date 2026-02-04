@@ -12,6 +12,7 @@ export interface AuthUser {
   role: UserRole;
   phone?: string;
   specialization?: string;
+  degree?: string;
   experience?: number;
   consultation_fee?: number;
   available_days?: string[];
@@ -36,6 +37,7 @@ interface AuthContextType {
     phone?: string;
     role: UserRole;
     specialization?: string;
+    degree?: string;
     experience?: number;
     address?: string;
     area?: string;
@@ -43,7 +45,7 @@ interface AuthContextType {
     state?: string;
     pincode?: string;
     departments?: string[];
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => Promise<void>;
   updateUser: (data: Partial<AuthUser>) => Promise<void>;
 }
@@ -119,6 +121,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     phone?: string;
     role: UserRole;
     specialization?: string;
+    degree?: string;
     experience?: number;
     address?: string;
     area?: string;
@@ -126,7 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     state?: string;
     pincode?: string;
     departments?: string[];
-  }): Promise<{ success: boolean; error?: string }> => {
+  }): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
         method: 'POST',
@@ -138,7 +141,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const newUser = await response.json();
         setUser(newUser);
         await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(newUser));
-        return { success: true };
+        return { success: true, user: newUser };
       } else {
         const error = await response.json();
         return { success: false, error: error.detail || 'Registration failed' };

@@ -1,22 +1,29 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Modal, ScrollView, Linking, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
-import { useData, OSMHospital } from '../../src/context/DataContext';
+import * as Location from 'expo-location';
+import { useData, OSMHospital, Doctor } from '../../src/context/DataContext';
 import { Card } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
 export default function Hospitals() {
   const router = useRouter();
-  const { osmHospitals, isLoading } = useData();
+  const { osmHospitals, isLoading, getDoctorsForHospital, hospitalDoctors } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [localityQuery, setLocalityQuery] = useState('');
-  const [mapHospital, setMapHospital] = useState<OSMHospital | null>(null);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, any>>({});
+  const [isLocating, setIsLocating] = useState(false);
+  const [nearbyOnly, setNearbyOnly] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userAddress, setUserAddress] = useState<string | null>(null);
+  const [selectedHospital, setSelectedHospital] = useState<OSMHospital | null>(null);
+  const [doctorModalOpen, setDoctorModalOpen] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
 
   const filteredHospitals = useMemo(() => {
     let list = osmHospitals;
@@ -27,16 +34,36 @@ export default function Hospitals() {
     if (localityQuery) {
       const lq = localityQuery.toLowerCase();
       list = list.filter(h => {
-        const locality = (h.locality || '').toLowerCase();
-        if (locality) return locality.includes(lq);
-        return (h.name || '').toLowerCase().includes(lq);
+        const location = [
+          h.locality,
+          h.street,
+          h.city,
+          h.district,
+          h.state,
+          h.postcode,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return location.includes(lq) || (h.name || '').toLowerCase().includes(lq);
       });
     }
+    if (nearbyOnly && userLocation) {
+      const withDistance = list.map(h => ({
+        hospital: h,
+        distanceKm: haversineKm(userLocation.latitude, userLocation.longitude, h.latitude, h.longitude),
+      }));
+      withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
+      return withDistance.map(item => item.hospital);
+    }
     return list;
-  }, [osmHospitals, searchQuery, localityQuery]);
+  }, [osmHospitals, searchQuery, localityQuery, nearbyOnly, userLocation]);
 
   const renderHospital = ({ item }: { item: OSMHospital }) => {
     const addressSource = resolvedAddresses[item.id] || item;
+    const distanceKm = userLocation
+      ? haversineKm(userLocation.latitude, userLocation.longitude, item.latitude, item.longitude)
+      : null;
     return (
       <Card style={styles.hospitalCard} elevation="medium">
         <View style={styles.hospitalHeader}>
@@ -55,27 +82,79 @@ export default function Hospitals() {
             ) : (
               addressSource?.locality ? <Text style={styles.coordsText}>{addressSource.locality}</Text> : null
             )}
+            {distanceKm !== null ? (
+              <Text style={styles.distanceText}>{distanceKm.toFixed(1)} km away</Text>
+            ) : null}
           </View>
         </View>
 
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.viewDoctorsBtn}
-            onPress={() => router.push(`/(user)/osm-hospital/${item.id}`)}
+            onPress={() => openDoctors(item)}
           >
             <Ionicons name="people" size={18} color={colors.primary} />
-            <Text style={styles.viewDoctorsText}>View Doctors</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.viewBtn}
-            onPress={() => setMapHospital(item)}
-          >
-            <Ionicons name="map" size={18} color={colors.primary} />
-            <Text style={styles.viewBtnText}>View on Map</Text>
+            <Text style={styles.viewDoctorsText}>View Details</Text>
           </TouchableOpacity>
         </View>
       </Card>
     );
+  };
+
+  const requestLocation = async () => {
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setNearbyOnly(false);
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      const geocodes = await Location.reverseGeocodeAsync({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      if (geocodes && geocodes.length > 0) {
+        const g = geocodes[0];
+        const parts = [g.city, g.subregion, g.region, g.country].filter(Boolean);
+        setUserAddress(parts.join(', '));
+      }
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const openDoctors = async (hospital: OSMHospital) => {
+    setSelectedHospital(hospital);
+    setDoctorModalOpen(true);
+    if (!hospitalDoctors[hospital.id]) {
+      setLoadingDoctors(true);
+      await getDoctorsForHospital(hospital.id);
+      setLoadingDoctors(false);
+    }
+  };
+
+  const doctorsForSelected = selectedHospital ? (hospitalDoctors[selectedHospital.id] || []) : [];
+
+  const openInGoogleMaps = async (hospital: OSMHospital) => {
+    const lat = hospital.latitude;
+    const lon = hospital.longitude;
+    const label = encodeURIComponent(hospital.name || 'Hospital');
+    const appUrl = Platform.select({
+      ios: `comgooglemaps://?q=${lat},${lon}(${label})`,
+      android: `geo:${lat},${lon}?q=${lat},${lon}(${label})`,
+      default: '',
+    });
+    if (appUrl) {
+      const canOpen = await Linking.canOpenURL(appUrl);
+      if (canOpen) {
+        await Linking.openURL(appUrl);
+        return;
+      }
+    }
+    const webUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+    await Linking.openURL(webUrl);
   };
 
   useEffect(() => {
@@ -127,6 +206,30 @@ export default function Hospitals() {
         <View style={{ width: 44 }} />
       </View>
 
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={[styles.nearbyBtn, nearbyOnly && styles.nearbyBtnActive]}
+          onPress={async () => {
+            if (!nearbyOnly && !userLocation) await requestLocation();
+            setNearbyOnly(prev => !prev);
+          }}
+          disabled={isLocating}
+        >
+          <Ionicons name="navigate" size={16} color={nearbyOnly ? '#FFF' : colors.primary} />
+          <Text style={[styles.nearbyBtnText, nearbyOnly && styles.nearbyBtnTextActive]}>
+            {isLocating ? 'Locating...' : 'Near Me'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {nearbyOnly && userLocation ? (
+        <View style={styles.locationRow}>
+          <Ionicons name="location" size={16} color={colors.textLight} />
+          <Text style={styles.locationText}>
+            Your location: {userAddress || `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color={colors.textLight} />
         <TextInput
@@ -146,7 +249,7 @@ export default function Hospitals() {
         <Ionicons name="location-outline" size={20} color={colors.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Filter by locality..."
+          placeholder="Filter by area or city..."
           placeholderTextColor={colors.textLight}
           value={localityQuery}
           onChangeText={setLocalityQuery}
@@ -170,39 +273,125 @@ export default function Hospitals() {
         <View style={styles.emptyState}>
           <Ionicons name="business-outline" size={64} color={colors.textLight} />
           <Text style={styles.emptyTitle}>No hospitals found</Text>
-          <Text style={styles.emptyText}>Try a different search term or add a hospital.</Text>
-          <TouchableOpacity style={styles.addHospitalBtn} onPress={() => router.push('/(hospital)/profile')}>
-            <Ionicons name="add-circle" size={18} color="#FFF" />
-            <Text style={styles.addHospitalBtnText}>Add Hospital</Text>
-          </TouchableOpacity>
+          <Text style={styles.emptyText}>Try a different search term.</Text>
         </View>
       )}
 
       <Modal
-        visible={!!mapHospital}
+        visible={doctorModalOpen}
         animationType="slide"
-        onRequestClose={() => setMapHospital(null)}
+        onRequestClose={() => setDoctorModalOpen(false)}
       >
-        <SafeAreaView style={styles.mapContainer}>
+        <SafeAreaView style={styles.doctorModalContainer}>
           <View style={styles.mapHeader}>
-            <TouchableOpacity onPress={() => setMapHospital(null)} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => setDoctorModalOpen(false)} style={styles.backBtn}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.mapTitle}>{mapHospital?.name || 'Hospital Location'}</Text>
+            <Text style={styles.mapTitle}>{selectedHospital?.name || 'Hospital Details'}</Text>
             <View style={{ width: 44 }} />
           </View>
-          {mapHospital && (
-            <WebView
-              source={{
-                uri: `https://www.openstreetmap.org/?mlat=${mapHospital.latitude}&mlon=${mapHospital.longitude}#map=16/${mapHospital.latitude}/${mapHospital.longitude}`,
-              }}
-            />
-          )}
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {selectedHospital && (
+              <View style={styles.detailSection}>
+                <View style={styles.detailRow}>
+                  <Ionicons name="location-outline" size={18} color={colors.textLight} />
+                  <Text style={styles.detailText}>
+                    {[selectedHospital.locality, selectedHospital.street, selectedHospital.city, selectedHospital.district, selectedHospital.state, selectedHospital.postcode]
+                      .filter(Boolean)
+                      .join(', ') || 'Location details not available'}
+                  </Text>
+                </View>
+                {userLocation ? (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="navigate" size={18} color={colors.textLight} />
+                    <Text style={styles.detailText}>
+                      {haversineKm(userLocation.latitude, userLocation.longitude, selectedHospital.latitude, selectedHospital.longitude).toFixed(1)} km away
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+            {selectedHospital && (
+              <View style={styles.mapPreview}>
+                <WebView
+                  source={{
+                    uri: buildOsmEmbedUrl(selectedHospital.latitude, selectedHospital.longitude),
+                  }}
+                  style={{ height: 220 }}
+                />
+                <TouchableOpacity
+                  style={styles.mapActionBtn}
+                  onPress={() => openInGoogleMaps(selectedHospital)}
+                >
+                  <Ionicons name="navigate" size={16} color="#FFF" />
+                  <Text style={styles.mapActionText}>Open in Google Maps</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Doctors</Text>
+            </View>
+            {loadingDoctors ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <View style={styles.doctorsList}>
+                {doctorsForSelected.length > 0 ? (
+                  doctorsForSelected.map((doc) => <DoctorCard key={doc.id} doctor={doc} />)
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="people-outline" size={64} color={colors.textLight} />
+                    <Text style={styles.emptyTitle}>No doctors listed</Text>
+                    <Text style={styles.emptyText}>This hospital has no doctors selected yet.</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
 }
+
+const DoctorCard = ({ doctor }: { doctor: Doctor }) => (
+  <Card style={styles.doctorCard} elevation="medium">
+    <View style={styles.doctorRow}>
+      <View style={styles.doctorAvatar}>
+        <Ionicons name="person-outline" size={24} color={colors.primary} />
+      </View>
+      <View style={styles.doctorInfo}>
+        <Text style={styles.doctorName}>{doctor.name}</Text>
+        <Text style={styles.doctorSpec}>{doctor.specialization}</Text>
+        <Text style={styles.doctorMeta}>₹{doctor.consultation_fee} • {doctor.experience} yrs exp</Text>
+      </View>
+    </View>
+  </Card>
+);
+
+const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const buildOsmEmbedUrl = (lat: number, lon: number) => {
+  const delta = 0.01;
+  const left = lon - delta;
+  const bottom = lat - delta;
+  const right = lon + delta;
+  const top = lat + delta;
+  const bbox = `${left},${bottom},${right},${top}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat}%2C${lon}`;
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -224,96 +413,87 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 44,
     height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.text,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    marginHorizontal: 20,
+    marginHorizontal: 16,
     marginTop: 8,
-    marginBottom: 8,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    gap: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
+    height: 44,
     color: colors.text,
   },
   listContent: {
-    padding: 20,
-    paddingTop: 8,
+    padding: 16,
+    paddingBottom: 120,
   },
   hospitalCard: {
     marginBottom: 16,
-    padding: 16,
   },
   hospitalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 12,
   },
   hospitalIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   headerInfo: {
     flex: 1,
   },
   hospitalName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
     marginBottom: 4,
   },
-  coordsText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
   localityText: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 2,
+  },
+  coordsText: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
   },
   footer: {
+    marginTop: 14,
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  viewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   viewDoctorsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '10',
   },
   viewDoctorsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  viewBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -321,35 +501,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    marginTop: 80,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 12,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
+    marginTop: 6,
     textAlign: 'center',
-  },
-  addHospitalBtn: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  addHospitalBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFF',
   },
   mapContainer: {
     flex: 1,
@@ -361,12 +525,141 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   mapTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  locationText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  nearbyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  nearbyBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  nearbyBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  nearbyBtnTextActive: {
+    color: '#FFF',
+  },
+  distanceText: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
+  },
+  doctorModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  detailSection: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 8,
+  },
+  detailText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  mapPreview: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  mapActionBtn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+  },
+  mapActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  doctorsList: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  doctorCard: {
+    marginBottom: 12,
+  },
+  doctorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  doctorAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.primary + '10',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doctorInfo: {
+    flex: 1,
+  },
+  doctorName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  doctorSpec: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  doctorMeta: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
   },
 });

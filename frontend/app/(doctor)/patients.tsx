@@ -1,12 +1,11 @@
-import React, { useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useMemo, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
 import { useData, Appointment } from '../../src/context/DataContext';
-import { Card, Badge } from '../../src/components';
+import { Card, Badge, Button } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
 interface Patient {
@@ -18,9 +17,11 @@ interface Patient {
 }
 
 export default function MyPatients() {
-    const router = useRouter();
     const { user } = useAuth();
-    const { appointments, getDoctorAppointments, doctors, isLoading } = useData();
+    const { appointments, getDoctorAppointments, doctors, isLoading, getPatientTimeline } = useData();
+    const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+    const [timeline, setTimeline] = useState<Appointment[]>([]);
+    const [timelineLoading, setTimelineLoading] = useState(false);
 
     const doctorProfile = useMemo(() => {
         return doctors.find(d => d.email === user?.email);
@@ -68,9 +69,21 @@ export default function MyPatients() {
         );
     }, [appointments]);
 
+    const openTimeline = async (patient: Patient) => {
+        if (!doctorProfile?.id) return;
+        setSelectedPatient(patient);
+        setTimelineLoading(true);
+        try {
+            const data = await getPatientTimeline(doctorProfile.id, patient.id);
+            setTimeline(data);
+        } finally {
+            setTimelineLoading(false);
+        }
+    };
+
     const renderPatient = ({ item }: { item: Patient }) => {
         return (
-            <Card style={styles.patientCard} onPress={() => router.push(`/(doctor)/patient/${item.id}`)}>
+            <Card style={styles.patientCard} onPress={() => openTimeline(item)}>
                 <View style={styles.patientRow}>
                     <View style={styles.avatarContainer}>
                         <View style={styles.avatar}>
@@ -158,6 +171,55 @@ export default function MyPatients() {
                     </Text>
                 </View>
             )}
+            <Modal
+                visible={!!selectedPatient}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setSelectedPatient(null)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>{selectedPatient?.name || 'Patient Timeline'}</Text>
+                            <TouchableOpacity onPress={() => setSelectedPatient(null)}>
+                                <Ionicons name="close" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        {timelineLoading ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                            </View>
+                        ) : (
+                            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.timelineList}>
+                                {timeline.length > 0 ? (
+                                    timeline.map((appt) => (
+                                        <Card key={appt.id} style={styles.timelineCard}>
+                                            <View style={styles.timelineHeader}>
+                                                <Text style={styles.timelineDate}>
+                                                    {format(new Date(appt.date), 'MMM d, yyyy')} • {appt.time_slot}
+                                                </Text>
+                                                <Badge text={appt.status.toUpperCase()} variant="info" />
+                                            </View>
+                                            <Text style={styles.timelineMeta}>Reason: {appt.reason || '—'}</Text>
+                                            <Text style={styles.timelineSectionTitle}>Complaint</Text>
+                                            <Text style={styles.timelineText}>{appt.patient_complaint || '—'}</Text>
+                                            <Text style={styles.timelineSectionTitle}>Diagnosis</Text>
+                                            <Text style={styles.timelineText}>{appt.diagnosis || '—'}</Text>
+                                            <Text style={styles.timelineSectionTitle}>Notes</Text>
+                                            <Text style={styles.timelineText}>{appt.record_notes || '—'}</Text>
+                                        </Card>
+                                    ))
+                                ) : (
+                                    <View style={styles.emptyState}>
+                                        <Text style={styles.emptyTitle}>No timeline yet</Text>
+                                        <Text style={styles.emptyText}>No records are available for this patient.</Text>
+                                    </View>
+                                )}
+                            </ScrollView>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -256,6 +318,69 @@ const styles = StyleSheet.create({
     metaText: {
         fontSize: 13,
         color: colors.textSecondary,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '85%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    timelineList: {
+        padding: 16,
+        paddingBottom: 24,
+    },
+    timelineCard: {
+        marginBottom: 12,
+        padding: 16,
+    },
+    timelineHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+        gap: 10,
+    },
+    timelineDate: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text,
+        flex: 1,
+    },
+    timelineMeta: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        marginTop: 6,
+    },
+    timelineSectionTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: colors.text,
+        marginTop: 10,
+    },
+    timelineText: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        marginTop: 4,
     },
     badgeContainer: {
         marginLeft: 8,

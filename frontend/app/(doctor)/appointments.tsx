@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Modal, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,8 +17,7 @@ export default function DoctorAppointments() {
         getDoctorAppointments,
         updateAppointmentStatus,
         updateAppointmentRecord,
-        doctors,
-        getHospitalById
+        doctors
     } = useData();
 
     const [filter, setFilter] = useState<FilterType>('all');
@@ -54,7 +53,7 @@ export default function DoctorAppointments() {
         return appointments.filter((a: Appointment) => a.status === filter);
     }, [appointments, filter]);
 
-    const handleStatusUpdate = async (appointmentId: string, status: 'accepted' | 'rejected') => {
+    const handleStatusUpdate = useCallback(async (appointmentId: string, status: 'accepted' | 'rejected') => {
         if (status === 'rejected') {
             setSelectedAptId(appointmentId);
             setRescheduleModalVisible(true);
@@ -67,7 +66,7 @@ export default function DoctorAppointments() {
         } catch (error) {
             Alert.alert('Error', 'Failed to update appointment status');
         }
-    };
+    }, [updateAppointmentStatus]);
 
     const handleRescheduleSubmit = async () => {
         if (!selectedAptId) return;
@@ -92,14 +91,14 @@ export default function DoctorAppointments() {
         }
     };
 
-    const openRecordModal = (appointment: Appointment) => {
+    const openRecordModal = useCallback((appointment: Appointment) => {
         setRecordAppointmentId(appointment.id);
         setPatientComplaint(appointment.patient_complaint || '');
         setDiagnosis(appointment.diagnosis || '');
         setRecordNotes(appointment.record_notes || '');
         setPrescription(appointment.prescription || []);
         setRecordModalVisible(true);
-    };
+    }, []);
 
     const addMedicine = () => {
         if (!medName.trim()) return;
@@ -141,7 +140,7 @@ export default function DoctorAppointments() {
         }
     };
 
-    const getStatusVariant = (status: Appointment['status']) => {
+    const getStatusVariant = useCallback((status: Appointment['status']) => {
         switch (status) {
             case 'pending': return 'warning';
             case 'accepted': return 'success';
@@ -149,7 +148,7 @@ export default function DoctorAppointments() {
             case 'completed': return 'info';
             default: return 'default';
         }
-    };
+    }, []);
 
     const filters: { label: string; value: FilterType }[] = [
         { label: 'All', value: 'all' },
@@ -159,57 +158,20 @@ export default function DoctorAppointments() {
         { label: 'Completed', value: 'completed' },
     ];
 
-    const renderAppointment = ({ item }: { item: Appointment }) => {
-        const hospital = item.hospital_id ? getHospitalById(item.hospital_id) : null;
-        return (
-            <Card style={styles.appointmentCard}>
-                <View style={styles.cardHeader}>
-                    <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
-                    <Badge text={item.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
-                </View>
+    const handleAccept = useCallback((id: string) => handleStatusUpdate(id, 'accepted'), [handleStatusUpdate]);
+    const handleReject = useCallback((id: string) => handleStatusUpdate(id, 'rejected'), [handleStatusUpdate]);
 
-                <View style={styles.patientRow}>
-                    <View style={styles.patientAvatar}>
-                        <Ionicons name="person" size={24} color={colors.primary} />
-                    </View>
-                    <View style={styles.patientInfo}>
-                        <Text style={styles.patientName}>{item.user_name}</Text>
-                        {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
-                    </View>
-                </View>
+    const renderAppointment = useCallback(({ item }: { item: Appointment }) => (
+        <AppointmentCard
+            item={item}
+            onAccept={handleAccept}
+            onReject={handleReject}
+            onOpenRecord={openRecordModal}
+            getStatusVariant={getStatusVariant}
+        />
+    ), [handleAccept, handleReject, openRecordModal, getStatusVariant]);
 
-                <View style={styles.detailsContainer}>
-                    <View style={styles.detailRow}>
-                        <Ionicons name="calendar" size={18} color={colors.textLight} />
-                        <Text style={styles.detailText}>{format(new Date(item.date), 'EEEE, MMM d, yyyy')}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                        <Ionicons name="time" size={18} color={colors.textLight} />
-                        <Text style={styles.detailText}>{item.time_slot}</Text>
-                    </View>
-                </View>
-
-                {item.status === 'pending' && (
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => handleStatusUpdate(item.id, 'accepted')}>
-                            <Ionicons name="checkmark" size={20} color="#FFF" />
-                            <Text style={styles.actionBtnText}>Accept</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => handleStatusUpdate(item.id, 'rejected')}>
-                            <Ionicons name="close" size={20} color="#FFF" />
-                            <Text style={styles.actionBtnText}>Reject</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-                {(item.status === 'accepted' || item.status === 'completed') && (
-                    <TouchableOpacity style={styles.recordBtn} onPress={() => openRecordModal(item)}>
-                        <Ionicons name="document-text" size={18} color="#FFF" />
-                        <Text style={styles.recordBtnText}>Add Record</Text>
-                    </TouchableOpacity>
-                )}
-            </Card>
-        );
-    };
+    const keyExtractor = useCallback((item: Appointment) => item.id, []);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -233,9 +195,14 @@ export default function DoctorAppointments() {
             {filteredAppointments.length > 0 ? (
                 <FlatList
                     data={filteredAppointments}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={keyExtractor}
                     renderItem={renderAppointment}
                     contentContainerStyle={styles.listContent}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={7}
+                    removeClippedSubviews
+                    updateCellsBatchingPeriod={50}
                 />
             ) : (
                 <View style={styles.emptyState}>
@@ -401,6 +368,67 @@ export default function DoctorAppointments() {
         </SafeAreaView>
     );
 }
+
+const AppointmentCard = React.memo(({
+    item,
+    onAccept,
+    onReject,
+    onOpenRecord,
+    getStatusVariant,
+}: {
+    item: Appointment;
+    onAccept: (id: string) => void;
+    onReject: (id: string) => void;
+    onOpenRecord: (appointment: Appointment) => void;
+    getStatusVariant: (status: Appointment['status']) => string;
+}) => (
+    <Card style={styles.appointmentCard}>
+        <View style={styles.cardHeader}>
+            <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
+            <Badge text={item.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
+        </View>
+
+        <View style={styles.patientRow}>
+            <View style={styles.patientAvatar}>
+                <Ionicons name="person" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.patientInfo}>
+                <Text style={styles.patientName}>{item.user_name}</Text>
+                {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
+            </View>
+        </View>
+
+        <View style={styles.detailsContainer}>
+            <View style={styles.detailRow}>
+                <Ionicons name="calendar" size={18} color={colors.textLight} />
+                <Text style={styles.detailText}>{format(new Date(item.date), 'EEEE, MMM d, yyyy')}</Text>
+            </View>
+            <View style={styles.detailRow}>
+                <Ionicons name="time" size={18} color={colors.textLight} />
+                <Text style={styles.detailText}>{item.time_slot}</Text>
+            </View>
+        </View>
+
+        {item.status === 'pending' && (
+            <View style={styles.actionButtons}>
+                <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => onAccept(item.id)}>
+                    <Ionicons name="checkmark" size={20} color="#FFF" />
+                    <Text style={styles.actionBtnText}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => onReject(item.id)}>
+                    <Ionicons name="close" size={20} color="#FFF" />
+                    <Text style={styles.actionBtnText}>Reject</Text>
+                </TouchableOpacity>
+            </View>
+        )}
+        {(item.status === 'accepted' || item.status === 'completed') && (
+            <TouchableOpacity style={styles.recordBtn} onPress={() => onOpenRecord(item)}>
+                <Ionicons name="document-text" size={18} color="#FFF" />
+                <Text style={styles.recordBtnText}>Add Record</Text>
+            </TouchableOpacity>
+        )}
+    </Card>
+));
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },

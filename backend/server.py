@@ -64,6 +64,7 @@ class User(BaseModel):
     
     # Doctor Specific
     specialization: Optional[str] = None
+    degree: Optional[str] = None
     experience: Optional[int] = 0
     consultation_fee: Optional[int] = 500
     hospital_id: Optional[str] = None
@@ -90,6 +91,7 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     role: str = "user"
     specialization: Optional[str] = None
+    degree: Optional[str] = None
     experience: Optional[int] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -109,6 +111,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     role: str
     specialization: Optional[str] = None
+    degree: Optional[str] = None
     experience: Optional[int] = None
     consultation_fee: Optional[int] = None
     available_days: Optional[List[str]] = None

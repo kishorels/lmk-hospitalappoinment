@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, A
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { useAuth } from '../../src/context/AuthContext';
 import { useData } from '../../src/context/DataContext';
 import { Card, Button } from '../../src/components';
@@ -32,7 +33,15 @@ export default function Reminders() {
     try {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') return;
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      const projectId =
+        process.env.EXPO_PUBLIC_PROJECT_ID ||
+        Constants.easConfig?.projectId ||
+        Constants.expoConfig?.extra?.eas?.projectId;
+      if (!projectId) {
+        console.warn('Push token skipped: missing projectId (set EXPO_PUBLIC_PROJECT_ID)');
+        return;
+      }
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/push/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

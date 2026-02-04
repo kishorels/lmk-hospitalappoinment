@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, UserRole } from '../../src/context/AuthContext';
+import { useData } from '../../src/context/DataContext';
 import { Button, Input } from '../../src/components';
 import { colors, gradients } from '../../src/theme/colors';
 
 // Specializations list
 const SPECIALIZATIONS = [
   'General Physician',
+  'Family Medicine',
+  'Internal Medicine',
+  'Emergency Medicine',
   'Cardiologist',
+  'Interventional Cardiologist',
   'Dermatologist',
   'Pediatrician',
   'Orthopedic',
@@ -22,6 +27,111 @@ const SPECIALIZATIONS = [
   'Gynecologist',
   'Psychiatrist',
   'Urologist',
+  'Endocrinologist',
+  'Nephrologist',
+  'Gastroenterologist',
+  'Pulmonologist',
+  'Oncologist',
+  'Radiologist',
+  'Pathologist',
+  'Anesthesiologist',
+  'Rheumatologist',
+  'Hematologist',
+  'Infectious Disease',
+  'General Surgeon',
+  'Cardiothoracic Surgeon',
+  'Neurosurgeon',
+  'Plastic Surgeon',
+  'Vascular Surgeon',
+  'Orthopedic Surgeon',
+  'Pediatric Surgeon',
+  'Obstetrician',
+  'Diabetologist',
+  'Allergist/Immunologist',
+  'Physiotherapist',
+  'Dietitian/Nutritionist',
+];
+
+const SPECIALIZATION_CATEGORIES: { label: string; items: string[] }[] = [
+  { label: 'All', items: SPECIALIZATIONS },
+  { label: 'Medicine', items: [
+    'General Physician',
+    'Family Medicine',
+    'Internal Medicine',
+    'Emergency Medicine',
+    'Endocrinologist',
+    'Nephrologist',
+    'Gastroenterologist',
+    'Pulmonologist',
+    'Rheumatologist',
+    'Hematologist',
+    'Infectious Disease',
+    'Diabetologist',
+    'Allergist/Immunologist',
+  ] },
+  { label: 'Surgery', items: [
+    'General Surgeon',
+    'Cardiothoracic Surgeon',
+    'Neurosurgeon',
+    'Plastic Surgeon',
+    'Vascular Surgeon',
+    'Orthopedic Surgeon',
+    'Pediatric Surgeon',
+    'Obstetrician',
+    'Anesthesiologist',
+  ] },
+  { label: 'Women', items: [
+    'Gynecologist',
+    'Obstetrician',
+  ] },
+  { label: 'Pediatrics', items: [
+    'Pediatrician',
+    'Pediatric Surgeon',
+  ] },
+  { label: 'Diagnostics', items: [
+    'Radiologist',
+    'Pathologist',
+  ] },
+  { label: 'Mental', items: [
+    'Psychiatrist',
+  ] },
+  { label: 'Other', items: [
+    'Cardiologist',
+    'Interventional Cardiologist',
+    'Dermatologist',
+    'Orthopedic',
+    'Neurologist',
+    'ENT Specialist',
+    'Ophthalmologist',
+    'Dentist',
+    'Urologist',
+    'Physiotherapist',
+    'Dietitian/Nutritionist',
+    'Oncologist',
+  ] },
+];
+
+const DEGREE_OPTIONS = [
+  'MBBS',
+  'MD',
+  'MS',
+  'DNB',
+  'DM',
+  'MCh',
+  'BDS',
+  'MDS',
+  'BAMS',
+  'BHMS',
+  'BUMS',
+  'BNYS',
+  'BPT',
+  'MPT',
+  'BPharm',
+  'MPharm',
+  'PharmD',
+  'DPM',
+  'MPH',
+  'MBA (Hospital Mgmt)',
 ];
 
 const HOSPITAL_DEPARTMENTS = [
@@ -53,6 +163,7 @@ export default function Signup() {
   const router = useRouter();
   const params = useLocalSearchParams<{ role?: string }>();
   const { signup } = useAuth();
+  const { osmHospitals, getOsmHospitals, saveDoctorHospitals } = useData();
 
   const role = (params.role as UserRole) || 'user';
 
@@ -75,6 +186,13 @@ export default function Signup() {
   // Doctor fields
   const [specialization, setSpecialization] = useState('');
   const [experience, setExperience] = useState('');
+  const [specializationSearch, setSpecializationSearch] = useState('');
+  const [specializationCategory, setSpecializationCategory] = useState('All');
+  const [degree, setDegree] = useState('');
+  const [degreeSearch, setDegreeSearch] = useState('');
+  const [hospitalSearch, setHospitalSearch] = useState('');
+  const [selectedHospitalIds, setSelectedHospitalIds] = useState<string[]>([]);
+  const [isHospitalsLoading, setIsHospitalsLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -106,6 +224,8 @@ export default function Signup() {
 
     if (role === 'doctor') {
       if (!specialization) newErrors.specialization = 'Specialization is required';
+      if (!degree) newErrors.degree = 'Degree is required';
+      if (selectedHospitalIds.length === 0) newErrors.hospitals = 'Select at least one hospital';
     }
 
     setErrors(newErrors);
@@ -130,6 +250,7 @@ export default function Signup() {
         phone,
         role,
         specialization: role === 'doctor' ? specialization : undefined,
+        degree: role === 'doctor' ? degree : undefined,
         experience: role === 'doctor' ? parseInt(experience) || 0 : undefined,
         address: role === 'hospital' ? address : undefined,
         area: role === 'hospital' ? area : undefined,
@@ -140,6 +261,9 @@ export default function Signup() {
       });
 
       if (result.success) {
+        if (role === 'doctor' && result.user && selectedHospitalIds.length > 0) {
+          await saveDoctorHospitals(result.user.id, selectedHospitalIds);
+        }
         router.replace('/');
       } else {
         Alert.alert('Signup Failed', result.error || 'Registration failed. Please try again.');
@@ -192,6 +316,37 @@ export default function Signup() {
     setSelectedDepartments(prev => prev.filter(d => d !== dept));
   };
 
+  useEffect(() => {
+    if (role !== 'doctor') return;
+    if (osmHospitals.length > 0) return;
+    setIsHospitalsLoading(true);
+    getOsmHospitals().finally(() => setIsHospitalsLoading(false));
+  }, [role, osmHospitals.length]);
+
+  const filteredHospitals = useMemo(() => {
+    const q = hospitalSearch.trim().toLowerCase();
+    if (!q) return osmHospitals;
+    return osmHospitals.filter(h => (h.name || '').toLowerCase().includes(q));
+  }, [hospitalSearch, osmHospitals]);
+
+  const toggleHospital = (id: string) => {
+    setSelectedHospitalIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const availableSpecializations = useMemo(() => {
+    const category = SPECIALIZATION_CATEGORIES.find(c => c.label === specializationCategory);
+    const base = category ? category.items : SPECIALIZATIONS;
+    const q = specializationSearch.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(s => s.toLowerCase().includes(q));
+  }, [specializationCategory, specializationSearch]);
+
+  const filteredDegrees = useMemo(() => {
+    const q = degreeSearch.trim().toLowerCase();
+    if (!q) return DEGREE_OPTIONS;
+    return DEGREE_OPTIONS.filter(d => d.toLowerCase().includes(q));
+  }, [degreeSearch]);
+
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView
@@ -217,178 +372,395 @@ export default function Signup() {
             </SafeAreaView>
           </LinearGradient>
           <View style={styles.form}>
-            <Input
-              label={role === 'hospital' ? 'Hospital Name' : 'Full Name'}
-              placeholder={role === 'hospital' ? 'Enter hospital name' : 'Enter your name'}
-              value={name}
-              onChangeText={setName}
-              error={errors.name}
-              autoCapitalize="words"
-              leftIcon={<Ionicons name="person-outline" size={20} color={colors.textSecondary} />}
-            />
-            <Input
-              label="Email"
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              error={errors.email}
-              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
-            />
-            <Input
-              label="Phone Number"
-              placeholder="Enter your phone"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              error={errors.phone}
-              leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
-            />
-
-            {/* Hospital specific fields */}
-            {role === 'hospital' && (
-              <>
+            {role === 'user' && (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Patient Details</Text>
+                <Text style={styles.sectionSubtitle}>Basic info for your account.</Text>
                 <Input
-                  label="Hospital Address"
-                  placeholder="Street address, building, landmark"
-                  value={address}
-                  onChangeText={setAddress}
-                  error={errors.address}
-                  multiline
-                  leftIcon={<Ionicons name="location-outline" size={20} color={colors.textSecondary} />}
-                />
-                <Input
-                  label="Area / Locality"
-                  placeholder="Enter area or locality"
-                  value={area}
-                  onChangeText={setArea}
-                  error={errors.area}
+                  label="Full Name"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChangeText={setName}
+                  error={errors.name}
                   autoCapitalize="words"
-                  leftIcon={<Ionicons name="map-outline" size={20} color={colors.textSecondary} />}
+                  leftIcon={<Ionicons name="person-outline" size={20} color={colors.textSecondary} />}
                 />
                 <Input
-                  label="City"
-                  placeholder="Enter city"
-                  value={city}
-                  onChangeText={setCity}
-                  error={errors.city}
-                  autoCapitalize="words"
-                  leftIcon={<Ionicons name="business-outline" size={20} color={colors.textSecondary} />}
-                />
-                <Input
-                  label="State"
-                  placeholder="Enter state"
-                  value={state}
-                  onChangeText={setState}
-                  error={errors.state}
-                  autoCapitalize="words"
-                  leftIcon={<Ionicons name="flag-outline" size={20} color={colors.textSecondary} />}
-                />
-                <Input
-                  label="Pincode"
-                  placeholder="Enter pincode"
-                  value={pincode}
-                  onChangeText={setPincode}
-                  error={errors.pincode}
-                  keyboardType="numeric"
+                  label="Email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  error={errors.email}
                   leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
                 />
                 <Input
-                  label="Departments"
-                  placeholder="e.g., Cardiology, Orthopedics"
-                  value={departmentInput}
-                  onChangeText={setDepartmentInput}
-                  leftIcon={<Ionicons name="list-outline" size={20} color={colors.textSecondary} />}
+                  label="Phone Number"
+                  placeholder="Enter your phone"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  error={errors.phone}
+                  leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
                 />
-                {errors.departments && <Text style={styles.errorText}>{errors.departments}</Text>}
-                {selectedDepartments.length > 0 && (
-                  <View style={styles.departmentChips}>
-                    {selectedDepartments.map((dept) => (
-                      <TouchableOpacity
-                        key={dept}
-                        style={styles.departmentChip}
-                        onPress={() => removeDepartment(dept)}
-                      >
-                        <Text style={styles.departmentChipText}>{dept}</Text>
-                        <Ionicons name="close" size={14} color={colors.text} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                {filteredDepartmentSuggestions.length > 0 && (
-                  <View style={styles.suggestionList}>
-                    {filteredDepartmentSuggestions.map((dept) => (
-                      <TouchableOpacity
-                        key={dept}
-                        style={styles.suggestionItem}
-                        onPress={() => addDepartment(dept)}
-                      >
-                        <Text style={styles.suggestionText}>{dept}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+              </View>
+            )}
+
+            {role === 'hospital' && (
+              <>
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle}>Hospital Details</Text>
+                  <Text style={styles.sectionSubtitle}>Official details for your facility.</Text>
+                  <Input
+                    label="Hospital Name"
+                    placeholder="Enter hospital name"
+                    value={name}
+                    onChangeText={setName}
+                    error={errors.name}
+                    autoCapitalize="words"
+                    leftIcon={<Ionicons name="business-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    error={errors.email}
+                    leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Phone Number"
+                    placeholder="Enter your phone"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    error={errors.phone}
+                    leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Hospital Address"
+                    placeholder="Street address, building, landmark"
+                    value={address}
+                    onChangeText={setAddress}
+                    error={errors.address}
+                    multiline
+                    leftIcon={<Ionicons name="location-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Area / Locality"
+                    placeholder="Enter area or locality"
+                    value={area}
+                    onChangeText={setArea}
+                    error={errors.area}
+                    autoCapitalize="words"
+                    leftIcon={<Ionicons name="map-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="City"
+                    placeholder="Enter city"
+                    value={city}
+                    onChangeText={setCity}
+                    error={errors.city}
+                    autoCapitalize="words"
+                    leftIcon={<Ionicons name="business-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="State"
+                    placeholder="Enter state"
+                    value={state}
+                    onChangeText={setState}
+                    error={errors.state}
+                    autoCapitalize="words"
+                    leftIcon={<Ionicons name="flag-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Pincode"
+                    placeholder="Enter pincode"
+                    value={pincode}
+                    onChangeText={setPincode}
+                    error={errors.pincode}
+                    keyboardType="numeric"
+                    leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
+                  />
+                </View>
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle}>Departments</Text>
+                  <Text style={styles.sectionSubtitle}>Add the specialties available in your hospital.</Text>
+                  <Input
+                    label="Departments"
+                    placeholder="e.g., Cardiology, Orthopedics"
+                    value={departmentInput}
+                    onChangeText={setDepartmentInput}
+                    leftIcon={<Ionicons name="list-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  {errors.departments && <Text style={styles.errorText}>{errors.departments}</Text>}
+                  {selectedDepartments.length > 0 && (
+                    <View style={styles.departmentChips}>
+                      {selectedDepartments.map((dept) => (
+                        <TouchableOpacity
+                          key={dept}
+                          style={styles.departmentChip}
+                          onPress={() => removeDepartment(dept)}
+                        >
+                          <Text style={styles.departmentChipText}>{dept}</Text>
+                          <Ionicons name="close" size={14} color={colors.text} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  {filteredDepartmentSuggestions.length > 0 && (
+                    <View style={styles.suggestionList}>
+                      {filteredDepartmentSuggestions.map((dept) => (
+                        <TouchableOpacity
+                          key={dept}
+                          style={styles.suggestionItem}
+                          onPress={() => addDepartment(dept)}
+                        >
+                          <Text style={styles.suggestionText}>{dept}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
               </>
             )}
 
             {/* Doctor specific fields */}
             {role === 'doctor' && (
               <>
-                <View style={styles.specializationContainer}>
-                  <Text style={styles.fieldLabel}>Specialization</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.specializationScroll}>
-                    {SPECIALIZATIONS.map((spec) => (
-                      <TouchableOpacity
-                        key={spec}
-                        style={[
-                          styles.specializationChip,
-                          specialization === spec && { backgroundColor: getRoleColor(), borderColor: getRoleColor() },
-                        ]}
-                        onPress={() => setSpecialization(spec)}
-                      >
-                        <Text
-                          style={[
-                            styles.specializationText,
-                            specialization === spec && { color: '#FFF' },
-                          ]}
-                        >
-                          {spec}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  {errors.specialization && <Text style={styles.errorText}>{errors.specialization}</Text>}
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle}>Account Details</Text>
+                  <Text style={styles.sectionSubtitle}>How patients can contact you.</Text>
+                  <Input
+                    label="Full Name"
+                    placeholder="Enter your name"
+                    value={name}
+                    onChangeText={setName}
+                    error={errors.name}
+                    autoCapitalize="words"
+                    leftIcon={<Ionicons name="person-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    error={errors.email}
+                    leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textSecondary} />}
+                  />
+                  <Input
+                    label="Phone Number"
+                    placeholder="Enter your phone"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    error={errors.phone}
+                    leftIcon={<Ionicons name="call-outline" size={20} color={colors.textSecondary} />}
+                  />
                 </View>
-                <Input
-                  label="Years of Experience"
-                  placeholder="Enter years"
-                  value={experience}
-                  onChangeText={setExperience}
-                  keyboardType="numeric"
-                  leftIcon={<Ionicons name="ribbon-outline" size={20} color={colors.textSecondary} />}
-                />
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle}>Doctor Profile</Text>
+                  <Text style={styles.sectionSubtitle}>Tell patients about your specialty and credentials.</Text>
+                  <View style={styles.specializationContainer}>
+                    <Text style={styles.fieldLabel}>Specialization Category</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.specializationScroll}>
+                      {SPECIALIZATION_CATEGORIES.map((cat) => (
+                        <TouchableOpacity
+                          key={cat.label}
+                          style={[
+                            styles.specializationChip,
+                            specializationCategory === cat.label && { backgroundColor: getRoleColor(), borderColor: getRoleColor() },
+                          ]}
+                          onPress={() => setSpecializationCategory(cat.label)}
+                        >
+                          <Text
+                            style={[
+                              styles.specializationText,
+                              specializationCategory === cat.label && { color: '#FFF' },
+                            ]}
+                          >
+                            {cat.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                  <View style={styles.specializationContainer}>
+                    <Text style={styles.fieldLabel}>Specialization</Text>
+                    <Input
+                      label="Search specialization"
+                      placeholder="Type to search..."
+                      value={specializationSearch}
+                      onChangeText={setSpecializationSearch}
+                      leftIcon={<Ionicons name="search-outline" size={20} color={colors.textSecondary} />}
+                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.specializationScroll}>
+                      {availableSpecializations.map((spec) => (
+                        <TouchableOpacity
+                          key={spec}
+                          style={[
+                            styles.specializationChip,
+                            specialization === spec && { backgroundColor: getRoleColor(), borderColor: getRoleColor() },
+                          ]}
+                          onPress={() => setSpecialization(spec)}
+                        >
+                          <Text
+                            style={[
+                              styles.specializationText,
+                              specialization === spec && { color: '#FFF' },
+                            ]}
+                          >
+                            {spec}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {errors.specialization && <Text style={styles.errorText}>{errors.specialization}</Text>}
+                  </View>
+                  <View style={styles.specializationContainer}>
+                    <Text style={styles.fieldLabel}>Degree</Text>
+                    <Input
+                      label="Search degree"
+                      placeholder="Type to search..."
+                      value={degreeSearch}
+                      onChangeText={setDegreeSearch}
+                      leftIcon={<Ionicons name="search-outline" size={20} color={colors.textSecondary} />}
+                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.specializationScroll}>
+                      {filteredDegrees.map((deg) => (
+                        <TouchableOpacity
+                          key={deg}
+                          style={[
+                            styles.specializationChip,
+                            degree === deg && { backgroundColor: getRoleColor(), borderColor: getRoleColor() },
+                          ]}
+                          onPress={() => setDegree(deg)}
+                        >
+                          <Text
+                            style={[
+                              styles.specializationText,
+                              degree === deg && { color: '#FFF' },
+                            ]}
+                          >
+                            {deg}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {errors.degree && <Text style={styles.errorText}>{errors.degree}</Text>}
+                  </View>
+                  <Input
+                    label="Years of Experience"
+                    placeholder="Enter years"
+                    value={experience}
+                    onChangeText={setExperience}
+                    keyboardType="numeric"
+                    leftIcon={<Ionicons name="ribbon-outline" size={20} color={colors.textSecondary} />}
+                  />
+                </View>
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle}>Hospital Affiliation</Text>
+                  <Text style={styles.sectionSubtitle}>Select hospitals where patients can book you.</Text>
+                  <View style={styles.hospitalSelectContainer}>
+                    <Text style={styles.fieldLabel}>Select Hospitals</Text>
+                    {selectedHospitalIds.length > 0 && (
+                      <View style={styles.selectedHospitals}>
+                        {selectedHospitalIds.map((id) => {
+                          const hospital = osmHospitals.find(h => h.id === id);
+                          if (!hospital) return null;
+                          return (
+                            <TouchableOpacity
+                              key={hospital.id}
+                              style={styles.selectedHospitalChip}
+                              onPress={() => toggleHospital(hospital.id)}
+                            >
+                              <Text style={styles.selectedHospitalText}>{hospital.name}</Text>
+                              <Ionicons name="close" size={14} color={colors.text} />
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                    <Input
+                      label="Search hospital"
+                      placeholder="Type to search..."
+                      value={hospitalSearch}
+                      onChangeText={setHospitalSearch}
+                      leftIcon={<Ionicons name="search-outline" size={20} color={colors.textSecondary} />}
+                    />
+                    {errors.hospitals && <Text style={styles.errorText}>{errors.hospitals}</Text>}
+                    {isHospitalsLoading ? (
+                      <View style={styles.hospitalLoading}>
+                        <Text style={styles.metaText}>Loading hospitals...</Text>
+                      </View>
+                    ) : hospitalSearch.trim().length < 2 ? (
+                      <View style={styles.hospitalEmpty}>
+                        <Text style={styles.metaText}>Type at least 2 letters to search hospitals</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.hospitalList}>
+                        {filteredHospitals.length === 0 ? (
+                          <View style={styles.hospitalEmpty}>
+                            <Text style={styles.metaText}>No hospitals found</Text>
+                          </View>
+                        ) : (
+                          filteredHospitals.slice(0, 30).map((item) => (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={[
+                                styles.hospitalRow,
+                                selectedHospitalIds.includes(item.id) && styles.hospitalRowSelected,
+                              ]}
+                              onPress={() => toggleHospital(item.id)}
+                            >
+                              <View style={styles.hospitalInfo}>
+                                <Text style={styles.hospitalName}>{item.name}</Text>
+                                <Text style={styles.hospitalMeta}>
+                                  {[item.locality, item.city, item.district, item.state].filter(Boolean).join(', ') || 'Area not available'}
+                                </Text>
+                              </View>
+                              {selectedHospitalIds.includes(item.id) && (
+                                <Ionicons name="checkmark-circle" size={20} color={getRoleColor()} />
+                              )}
+                            </TouchableOpacity>
+                          ))
+                        )}
+                      </View>
+                    )}
+                  </View>
+                </View>
               </>
             )}
 
-            <Input
-              label="Password"
-              placeholder="Create password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              error={errors.password}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
-            />
-            <Input
-              label="Confirm Password"
-              placeholder="Confirm password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              error={errors.confirmPassword}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
-            />
+            {role === 'doctor' || role === 'user' || role === 'hospital' ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Account Security</Text>
+                <Text style={styles.sectionSubtitle}>Set a secure password for your account.</Text>
+                <Input
+                  label="Password"
+                  placeholder="Create password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  error={errors.password}
+                  leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
+                />
+                <Input
+                  label="Confirm Password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  error={errors.confirmPassword}
+                  leftIcon={<Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />}
+                />
+              </View>
+            ) : null}
 
             <Button
               title={loading ? 'Creating Account...' : 'Create Account'}
@@ -492,6 +864,24 @@ const styles = StyleSheet.create({
   specializationContainer: {
     marginBottom: 8,
   },
+  sectionCard: {
+    backgroundColor: colors.background,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: -6,
+  },
   specializationScroll: {
     marginBottom: 4,
   },
@@ -518,6 +908,75 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 4,
+  },
+  hospitalSelectContainer: {
+    marginTop: 8,
+    gap: 8,
+  },
+  selectedHospitals: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  selectedHospitalChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.primary + '15',
+  },
+  selectedHospitalText: {
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  hospitalList: {
+    maxHeight: 260,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: colors.background,
+  },
+  hospitalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  hospitalInfo: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  hospitalName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  hospitalRowSelected: {
+    backgroundColor: colors.primary + '10',
+  },
+  hospitalMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  hospitalEmpty: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  hospitalLoading: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  metaText: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   departmentChip: {
     flexDirection: 'row',

@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal, ActivityIndicator } from 'react-native';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal, ActivityIndicator, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, OSMHospital } from '../../src/context/DataContext';
 import { Card } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
@@ -26,10 +26,45 @@ export default function DoctorProfile() {
     const [hospitalSearch, setHospitalSearch] = useState('');
     const [selectedHospitalIds, setSelectedHospitalIds] = useState<string[]>([]);
     const [isSavingHospitals, setIsSavingHospitals] = useState(false);
+    const [isHospitalsLoading, setIsHospitalsLoading] = useState(false);
+    const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, any>>({});
 
     useEffect(() => {
         getOsmHospitals();
     }, []);
+
+    useEffect(() => {
+        if (!showHospitalModal) return;
+        if (osmHospitals.length === 0) return;
+        let cancelled = false;
+        const run = async () => {
+            const missing = osmHospitals.filter(h => !resolvedAddresses[h.id]).slice(0, 30);
+            if (missing.length === 0) return;
+            const entries = await Promise.all(
+                missing.map(async (h) => {
+                    try {
+                        const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/osm-hospitals/${h.id}/reverse`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            return [h.id, data] as const;
+                        }
+                    } catch {}
+                    return [h.id, null] as const;
+                })
+            );
+            if (!cancelled) {
+                const next: Record<string, any> = {};
+                for (const [id, data] of entries) {
+                    if (data) next[id] = data;
+                }
+                if (Object.keys(next).length > 0) {
+                    setResolvedAddresses(prev => ({ ...prev, ...next }));
+                }
+            }
+        };
+        run();
+        return () => { cancelled = true; };
+    }, [showHospitalModal, osmHospitals, resolvedAddresses]);
 
     useEffect(() => {
         if (!doctorProfile?.id) return;
@@ -120,6 +155,52 @@ export default function DoctorProfile() {
                     }
                 },
             ]
+        );
+    };
+
+    const openHospitalModal = useCallback(async () => {
+        setShowHospitalModal(true);
+        if (osmHospitals.length === 0) {
+            setIsHospitalsLoading(true);
+            try {
+                await getOsmHospitals();
+            } finally {
+                setIsHospitalsLoading(false);
+            }
+        }
+    }, [osmHospitals.length, getOsmHospitals]);
+
+    const filteredHospitals = useMemo(() => {
+        const q = hospitalSearch.trim().toLowerCase();
+        if (!q) return osmHospitals;
+        return osmHospitals.filter(h => (h.name || '').toLowerCase().includes(q));
+    }, [hospitalSearch, osmHospitals]);
+
+    const renderHospitalItem = ({ item: hospital }: { item: OSMHospital }) => {
+        const isSelected = selectedHospitalIds.includes(hospital.id);
+        const address = resolvedAddresses[hospital.id];
+        return (
+            <TouchableOpacity
+                key={hospital.id}
+                style={[styles.hospitalSelectRow, isSelected && styles.hospitalSelectRowActive]}
+                onPress={() => toggleHospitalSelection(hospital.id)}
+            >
+                <View style={styles.hospitalSelectInfo}>
+                    <Text style={[styles.hospitalSelectName, isSelected && styles.hospitalSelectNameActive]}>
+                        {hospital.name}
+                    </Text>
+                    {address ? (
+                        <Text style={styles.hospitalSelectCoords}>
+                            {[address.locality, address.city, address.district, address.state, address.postcode].filter(Boolean).join(', ')}
+                        </Text>
+                    ) : (
+                        <Text style={styles.hospitalSelectCoords}>
+                            {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                        </Text>
+                    )}
+                </View>
+                {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.doctorPrimary} />}
+            </TouchableOpacity>
         );
     };
 
@@ -249,7 +330,7 @@ export default function DoctorProfile() {
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Works At (Hospitals)</Text>
-                        <TouchableOpacity onPress={() => setShowHospitalModal(true)} style={styles.editHospitalsBtn}>
+                        <TouchableOpacity onPress={openHospitalModal} style={styles.editHospitalsBtn}>
                             <Ionicons name="create-outline" size={16} color={colors.doctorPrimary} />
                             <Text style={styles.editHospitalsText}>Edit</Text>
                         </TouchableOpacity>
@@ -261,6 +342,7 @@ export default function DoctorProfile() {
                             selectedHospitalIds.map((id) => {
                                 const hospital = osmHospitals.find(h => h.id === id);
                                 if (!hospital) return null;
+                                const address = resolvedAddresses[hospital.id];
                                 return (
                                     <View key={hospital.id} style={styles.hospitalRow}>
                                         <View style={styles.hospitalIcon}>
@@ -269,9 +351,17 @@ export default function DoctorProfile() {
                                         <View style={styles.hospitalInfo}>
                                             <Text style={styles.hospitalName}>{hospital.name}</Text>
                                             <Text style={styles.hospitalAddress}>
-                                                {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                                                {address
+                                                    ? [address.locality, address.city, address.district, address.state, address.postcode].filter(Boolean).join(', ')
+                                                    : `${hospital.latitude.toFixed(4)}, ${hospital.longitude.toFixed(4)}`}
                                             </Text>
                                         </View>
+                                        <TouchableOpacity
+                                            style={styles.removeHospitalBtn}
+                                            onPress={() => toggleHospitalSelection(hospital.id)}
+                                        >
+                                            <Ionicons name="close-circle" size={20} color={colors.error} />
+                                        </TouchableOpacity>
                                     </View>
                                 );
                             })
@@ -312,35 +402,27 @@ export default function DoctorProfile() {
                                 onChangeText={setHospitalSearch}
                             />
                         </View>
-                        <ScrollView style={styles.hospitalList} showsVerticalScrollIndicator={false}>
-                            {osmHospitals
-                                .filter(h => h.name.toLowerCase().includes(hospitalSearch.toLowerCase()))
-                                .map((hospital) => {
-                                    const isSelected = selectedHospitalIds.includes(hospital.id);
-                                    return (
-                                        <TouchableOpacity
-                                            key={hospital.id}
-                                            style={[styles.hospitalSelectRow, isSelected && styles.hospitalSelectRowActive]}
-                                            onPress={() => toggleHospitalSelection(hospital.id)}
-                                        >
-                                            <View style={styles.hospitalSelectInfo}>
-                                                <Text style={[styles.hospitalSelectName, isSelected && styles.hospitalSelectNameActive]}>
-                                                    {hospital.name}
-                                                </Text>
-                                                <Text style={styles.hospitalSelectCoords}>
-                                                    {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
-                                                </Text>
-                                            </View>
-                                            {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.doctorPrimary} />}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            {osmHospitals.length === 0 && (
-                                <View style={styles.emptyHospitals}>
+                        {isHospitalsLoading ? (
+                            <View style={styles.emptyHospitals}>
+                                <ActivityIndicator color={colors.doctorPrimary} />
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={filteredHospitals}
+                                keyExtractor={(item) => item.id}
+                                renderItem={renderHospitalItem}
+                                style={styles.hospitalList}
+                                contentContainerStyle={filteredHospitals.length === 0 ? styles.emptyHospitals : undefined}
+                                ListEmptyComponent={
                                     <Text style={styles.emptyHospitalsText}>No hospitals available</Text>
-                                </View>
-                            )}
-                        </ScrollView>
+                                }
+                                keyboardShouldPersistTaps="handled"
+                                initialNumToRender={20}
+                                maxToRenderPerBatch={20}
+                                windowSize={10}
+                                removeClippedSubviews
+                            />
+                        )}
                         <TouchableOpacity
                             style={[styles.saveButton, isSavingHospitals && styles.disabledButton]}
                             onPress={handleSaveHospitals}
@@ -627,6 +709,11 @@ const styles = StyleSheet.create({
     },
     hospitalInfo: {
         flex: 1,
+    },
+    removeHospitalBtn: {
+        padding: 6,
+        borderRadius: 16,
+        backgroundColor: colors.error + '15',
     },
     hospitalName: {
         fontSize: 15,

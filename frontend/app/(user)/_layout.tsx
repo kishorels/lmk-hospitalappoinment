@@ -105,6 +105,24 @@ export default function UserLayout() {
           }}
         />
         <Tabs.Screen
+          name="appointments"
+          options={{
+            title: 'Appointments',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="calendar" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="reminders"
+          options={{
+            title: 'Reminders',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="alarm" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="hospitals"
           options={{
             title: 'Hospitals',
@@ -120,21 +138,9 @@ export default function UserLayout() {
           }}
         />
         <Tabs.Screen
-          name="appointments"
-          options={{
-            title: 'Appointments',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="notifications"
           options={{
-            title: 'Notifications',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="notifications" size={size} color={color} />
-            ),
+            href: null,
           }}
         />
         <Tabs.Screen

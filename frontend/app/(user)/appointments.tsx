@@ -20,10 +20,25 @@ export default function Appointments() {
     }
   }, [user]);
 
-  const sortedAppointments = useMemo(() => {
-    return [...appointments].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+  const groupedAppointments = useMemo(() => {
+    const groups = new Map<string, Appointment[]>();
+    appointments.forEach((appt) => {
+      const key = appt.doctor_id || appt.doctor_name || 'unknown';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(appt);
+    });
+    const grouped = Array.from(groups.entries()).map(([doctorId, items]) => {
+      const sorted = [...items].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      return { doctorId, items: sorted };
+    });
+    grouped.sort((a, b) => {
+      const aDate = a.items[0]?.date ? new Date(a.items[0].date).getTime() : 0;
+      const bDate = b.items[0]?.date ? new Date(b.items[0].date).getTime() : 0;
+      return bDate - aDate;
+    });
+    return grouped;
   }, [appointments]);
 
   const getStatusVariant = (status: Appointment['status']) => {
@@ -36,115 +51,114 @@ export default function Appointments() {
     }
   };
 
-  const renderAppointment = ({ item }: { item: Appointment }) => {
-    const doctor = getDoctorById(item.doctor_id);
-    const hospital = item.hospital_id ? getHospitalById(item.hospital_id) : null;
+  const renderAppointment = ({ item }: { item: { doctorId: string; items: Appointment[] } }) => {
+    const latest = item.items[0];
+    const doctor = getDoctorById(latest?.doctor_id);
 
     return (
       <Card style={styles.appointmentCard}>
-        <View style={styles.cardHeader}>
-          <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
-          <Badge
-            text={item.type === 'video' ? 'Video' : 'In-Person'}
-            variant="info"
-          />
-        </View>
-
         <View style={styles.doctorRow}>
           <View style={styles.doctorAvatar}>
             <Ionicons name="person" size={24} color={colors.doctorPrimary} />
           </View>
           <View style={styles.doctorInfo}>
-            <Text style={styles.doctorName}>{item.doctor_name}</Text>
+            <Text style={styles.doctorName}>{latest?.doctor_name}</Text>
             <Text style={styles.doctorSpec}>{doctor?.specialization || 'Specialist'}</Text>
+            <Text style={styles.timelineCount}>{item.items.length} visits</Text>
           </View>
         </View>
 
-        <View style={styles.detailsContainer}>
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar" size={18} color={colors.textLight} />
-            <Text style={styles.detailText}>
-              {format(new Date(item.date), 'EEEE, MMM d, yyyy')}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="time" size={18} color={colors.textLight} />
-            <Text style={styles.detailText}>{item.time_slot}</Text>
-          </View>
-          {(hospital || item.hospital_name) && (
-            <View style={styles.detailRow}>
-              <Ionicons name="business" size={18} color={colors.textLight} />
-              <Text style={styles.detailText}>{hospital?.name || item.hospital_name}</Text>
-            </View>
-          )}
-        </View>
-
-        {(item.patient_complaint || item.diagnosis || (item.prescription && item.prescription.length > 0) || item.record_notes) && (
-          <View style={styles.recordSection}>
-            <Text style={styles.recordTitle}>Doctor Record</Text>
-            <Text style={styles.recordLabel}>Complaint</Text>
-            <Text style={styles.recordText}>{item.patient_complaint || '—'}</Text>
-            <Text style={styles.recordLabel}>Diagnosis</Text>
-            <Text style={styles.recordText}>{item.diagnosis || '—'}</Text>
-            <Text style={styles.recordLabel}>Notes</Text>
-            <Text style={styles.recordText}>{item.record_notes || '—'}</Text>
-
-            <Text style={styles.recordLabel}>Prescription</Text>
-            {(item.prescription && item.prescription.length > 0) ? (
-              item.prescription.map((med, idx) => (
-                <View key={`${item.id}-med-${idx}`} style={styles.medRow}>
-                  <Text style={styles.medName}>{med.name}</Text>
-                  <Text style={styles.medMeta}>
-                    {med.dosage || 'Dose'} • {med.instructions || 'Instructions'} • {med.days ? `${med.days} days` : 'Days'}
-                  </Text>
+        <View style={styles.timelineContainer}>
+          {item.items.map((appt, index) => {
+            const hospital = appt.hospital_id ? getHospitalById(appt.hospital_id) : null;
+            const showLine = index < item.items.length - 1;
+            return (
+              <View key={appt.id} style={styles.timelineItem}>
+                <View style={styles.timelineMarker}>
+                  <View style={styles.timelineDot} />
+                  {showLine && <View style={styles.timelineLine} />}
                 </View>
-              ))
-            ) : (
-              <Text style={styles.recordText}>—</Text>
-            )}
-          </View>
-        )}
-
-        {item.status === 'rejected' && item.suggested_date && (
-          <View style={styles.rescheduleSection}>
-            <View style={styles.rescheduleHeader}>
-              <Ionicons name="chatbubble-ellipses" size={20} color={colors.doctorPrimary} />
-              <Text style={styles.rescheduleTitle}>Doctor's Suggestion</Text>
-            </View>
-            <Text style={styles.doctorNote}>"{item.doctor_note}"</Text>
-            <View style={styles.suggestionBox}>
-              <Text style={styles.suggestionTitle}>New Suggested Time:</Text>
-              <View style={styles.suggestionRow}>
-                <Ionicons name="calendar-outline" size={16} color={colors.text} />
-                <Text style={styles.suggestionText}>{format(new Date(item.suggested_date), 'MMM d, yyyy')}</Text>
+                <View style={styles.timelineContent}>
+                  <View style={styles.timelineHeader}>
+                    <Text style={styles.timelineDate}>
+                      {format(new Date(appt.date), 'MMM d, yyyy')} • {appt.time_slot}
+                    </Text>
+                    <Badge text={appt.status.toUpperCase()} variant={getStatusVariant(appt.status)} />
+                  </View>
+                  <View style={styles.timelineMetaRow}>
+                    <Badge text={appt.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
+                    {(hospital || appt.hospital_name) && (
+                      <Text style={styles.timelineMetaText}>{hospital?.name || appt.hospital_name}</Text>
+                    )}
+                  </View>
+                  {(appt.patient_complaint || appt.diagnosis || (appt.prescription && appt.prescription.length > 0) || appt.record_notes) && (
+                    <View style={styles.recordSection}>
+                      <Text style={styles.recordTitle}>Doctor Record</Text>
+                      <Text style={styles.recordLabel}>Complaint</Text>
+                      <Text style={styles.recordText}>{appt.patient_complaint || '—'}</Text>
+                      <Text style={styles.recordLabel}>Diagnosis</Text>
+                      <Text style={styles.recordText}>{appt.diagnosis || '—'}</Text>
+                      <Text style={styles.recordLabel}>Notes</Text>
+                      <Text style={styles.recordText}>{appt.record_notes || '—'}</Text>
+                      <Text style={styles.recordLabel}>Prescription</Text>
+                      {(appt.prescription && appt.prescription.length > 0) ? (
+                        appt.prescription.map((med, idx) => (
+                          <View key={`${appt.id}-med-${idx}`} style={styles.medRow}>
+                            <Text style={styles.medName}>{med.name}</Text>
+                            <Text style={styles.medMeta}>
+                              {med.dosage || 'Dose'} • {med.instructions || 'Instructions'} • {med.days ? `${med.days} days` : 'Days'}
+                            </Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.recordText}>—</Text>
+                      )}
+                    </View>
+                  )}
+                  {appt.status === 'rejected' && appt.suggested_date && (
+                    <View style={styles.rescheduleSection}>
+                      <View style={styles.rescheduleHeader}>
+                        <Ionicons name="chatbubble-ellipses" size={20} color={colors.doctorPrimary} />
+                        <Text style={styles.rescheduleTitle}>Doctor's Suggestion</Text>
+                      </View>
+                      <Text style={styles.doctorNote}>"{appt.doctor_note}"</Text>
+                      <View style={styles.suggestionBox}>
+                        <Text style={styles.suggestionTitle}>New Suggested Time:</Text>
+                        <View style={styles.suggestionRow}>
+                          <Ionicons name="calendar-outline" size={16} color={colors.text} />
+                          <Text style={styles.suggestionText}>{format(new Date(appt.suggested_date), 'MMM d, yyyy')}</Text>
+                        </View>
+                        <View style={styles.suggestionRow}>
+                          <Ionicons name="time-outline" size={16} color={colors.text} />
+                          <Text style={styles.suggestionText}>{appt.suggested_time}</Text>
+                        </View>
+                      </View>
+                      <Button
+                        title="Book Suggested Time"
+                        size="small"
+                        onPress={() => router.push({
+                          pathname: '/(user)/booking',
+                          params: {
+                            doctorId: appt.doctor_id,
+                            preselectDate: appt.suggested_date,
+                            preselectTime: appt.suggested_time
+                          }
+                        })}
+                        style={styles.bookSuggestedBtn}
+                      />
+                    </View>
+                  )}
+                  {appt.type === 'video' && appt.status === 'accepted' && (
+                    <TouchableOpacity style={styles.joinButton}>
+                      <Ionicons name="videocam" size={20} color="#FFF" />
+                      <Text style={styles.joinButtonText}>Join Video Call</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-              <View style={styles.suggestionRow}>
-                <Ionicons name="time-outline" size={16} color={colors.text} />
-                <Text style={styles.suggestionText}>{item.suggested_time}</Text>
-              </View>
-            </View>
-            <Button
-              title="Book Suggested Time"
-              size="small"
-              onPress={() => router.push({
-                pathname: '/(user)/booking',
-                params: {
-                  doctorId: item.doctor_id,
-                  preselectDate: item.suggested_date,
-                  preselectTime: item.suggested_time
-                }
-              })}
-              style={styles.bookSuggestedBtn}
-            />
-          </View>
-        )}
-
-        {item.type === 'video' && item.status === 'accepted' && (
-          <TouchableOpacity style={styles.joinButton}>
-            <Ionicons name="videocam" size={20} color="#FFF" />
-            <Text style={styles.joinButtonText}>Join Video Call</Text>
-          </TouchableOpacity>
-        )}
+            );
+          })}
+        </View>
       </Card>
     );
   };
@@ -155,10 +169,10 @@ export default function Appointments() {
         <Text style={styles.title}>My Appointments</Text>
       </View>
 
-      {sortedAppointments.length > 0 ? (
+      {groupedAppointments.length > 0 ? (
         <FlatList
-          data={sortedAppointments}
-          keyExtractor={(item) => item.id}
+          data={groupedAppointments}
+          keyExtractor={(item) => item.doctorId}
           renderItem={renderAppointment}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -204,11 +218,6 @@ const styles = StyleSheet.create({
   appointmentCard: {
     marginBottom: 16,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
   doctorRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,6 +244,62 @@ const styles = StyleSheet.create({
   doctorSpec: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  timelineCount: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginTop: 4,
+  },
+  timelineContainer: {
+    marginTop: 12,
+    gap: 12,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timelineMarker: {
+    width: 18,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    marginTop: 6,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: colors.border,
+    marginTop: 4,
+  },
+  timelineContent: {
+    flex: 1,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  timelineDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  timelineMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  timelineMetaText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    flex: 1,
   },
   detailsContainer: {
     backgroundColor: colors.background,

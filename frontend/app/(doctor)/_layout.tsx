@@ -74,6 +74,12 @@ export default function DoctorLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="patient/[id]"
+                options={{
+                    href: null,
+                }}
+            />
         </Tabs>
     );
 }
