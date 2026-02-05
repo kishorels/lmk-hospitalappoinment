@@ -4,10 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
-import { useData } from '../../src/context/DataContext';
+import { useData, Appointment } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
 import { colors } from '../../src/theme/colors';
-import { Appointment } from '../../src/data/mockData';
 
 type FilterType = 'all' | 'pending' | 'accepted' | 'rejected' | 'completed';
 
@@ -23,7 +22,7 @@ export default function HospitalAppointments() {
 
     const hospitalAppointments = useMemo(() => {
         if (!hospitalProfile) return [];
-        const allAppointments = appointments.filter(a => a.hospitalId === hospitalProfile.id);
+        const allAppointments = appointments.filter(a => a.hospital_id === hospitalProfile.id);
         if (filter === 'all') return allAppointments;
         return allAppointments.filter(a => a.status === filter);
     }, [hospitalProfile, appointments, filter]);
@@ -47,7 +46,7 @@ export default function HospitalAppointments() {
     ];
 
     const renderAppointment = ({ item }: { item: Appointment }) => {
-        const doctor = doctors.find(d => d.id === item.doctorId);
+        const doctor = doctors.find(d => d.id === item.doctor_id);
 
         return (
             <Card style={styles.appointmentCard}>
@@ -75,7 +74,7 @@ export default function HospitalAppointments() {
                     </View>
                     <View style={styles.detailRow}>
                         <Ionicons name="time" size={18} color={colors.textLight} />
-                        <Text style={styles.detailText}>{item.timeSlot}</Text>
+                        <Text style={styles.detailText}>{item.time_slot}</Text>
                     </View>
                 </View>
             </Card>

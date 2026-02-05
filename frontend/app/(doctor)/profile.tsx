@@ -48,7 +48,7 @@ export default function DoctorProfile() {
                             const data = await res.json();
                             return [h.id, data] as const;
                         }
-                    } catch {}
+                    } catch { }
                     return [h.id, null] as const;
                 })
             );
@@ -171,9 +171,14 @@ export default function DoctorProfile() {
     }, [osmHospitals.length, getOsmHospitals]);
 
     const filteredHospitals = useMemo(() => {
-        const q = hospitalSearch.trim().toLowerCase();
+        const q = hospitalSearch.trim().toLowerCase().replace(/\s+/g, '');
         if (!q) return osmHospitals;
-        return osmHospitals.filter(h => (h.name || '').toLowerCase().includes(q));
+        return osmHospitals.filter(h => {
+            const name = (h.name || '').toLowerCase().replace(/\s+/g, '');
+            const locality = (h.locality || '').toLowerCase().replace(/\s+/g, '');
+            const city = (h.city || '').toLowerCase().replace(/\s+/g, '');
+            return name.includes(q) || locality.includes(q) || city.includes(q);
+        });
     }, [hospitalSearch, osmHospitals]);
 
     const renderHospitalItem = ({ item: hospital }: { item: OSMHospital }) => {

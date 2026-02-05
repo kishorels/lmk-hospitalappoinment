@@ -184,10 +184,8 @@ export default function UserHome() {
         >
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
-              <View style={styles.greetingRow}>
-                <Text style={styles.greetingSmall}>Welcome back,</Text>
-                <Text style={styles.greeting}>{user?.name || 'User'}</Text>
-              </View>
+              <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'there'} 👋</Text>
+              <Text style={styles.greetingSubtext}>Find your doctor and book an appointment</Text>
 
               <TouchableOpacity
                 style={styles.locationRow}
@@ -300,7 +298,7 @@ export default function UserHome() {
                 <Ionicons name="business" size={28} color={colors.primary} />
               </LinearGradient>
               <Text style={styles.serviceTitle}>Hospitals</Text>
-              <Text style={styles.serviceCount}>{hospitals.length} available</Text>
+              <Text style={styles.serviceCount}>Find nearby</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -314,7 +312,7 @@ export default function UserHome() {
                 <Ionicons name="medkit" size={28} color={colors.secondary} />
               </LinearGradient>
               <Text style={styles.serviceTitle}>Doctors</Text>
-              <Text style={styles.serviceCount}>{doctors.length} available</Text>
+              <Text style={styles.serviceCount}>Book now</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -341,81 +339,59 @@ export default function UserHome() {
               >
                 <Ionicons name="calendar" size={28} color={colors.accent} />
               </LinearGradient>
-              <Text style={styles.serviceTitle}>My Bookings</Text>
-              <Text style={styles.serviceCount}>{appointments.length} total</Text>
+              <Text style={styles.serviceTitle}>My Appointments</Text>
+              <Text style={styles.serviceCountHighlight}>{appointments.length} booked</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Disease Categories */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Find by Specialty</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll}>
-            {DISEASE_CATEGORIES.map((category, index) => {
-              const iconColors = [colors.primary, colors.secondary, '#8B5CF6', colors.accent, '#EC4899', '#06B6D4', '#10B981', '#F59E0B'];
-              return (
-                <TouchableOpacity
-                  key={category.id}
-                  style={styles.categoryChip}
-                  onPress={() => router.push({ pathname: '/(user)/doctors', params: { specialization: category.name } })}
-                >
-                  <View style={[styles.categoryIcon, { backgroundColor: iconColors[index % iconColors.length] + '15' }]}>
-                    <Ionicons name={category.icon as any} size={22} color={iconColors[index % iconColors.length]} />
-                  </View>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Available Doctors */}
+        {/* Find by Specialty - 2 Column Grid */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top Doctors</Text>
+            <Text style={styles.sectionTitle}>Find by Specialty</Text>
             <TouchableOpacity onPress={() => router.push('/(user)/doctors')}>
               <Text style={styles.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>
-          {featuredDoctors.length > 0 ? (
-            featuredDoctors.slice(0, 3).map((doctor) => (
-              <Card
-                key={doctor.id}
-                onPress={() => router.push(`/(user)/booking?doctorId=${doctor.id}`)}
-                style={styles.doctorCard}
-              >
-                <View style={styles.doctorRow}>
-                  <View style={styles.doctorAvatarLarge}>
-                    <Ionicons name="person" size={28} color={colors.primary} />
+          <View style={styles.specialtyGrid}>
+            {DISEASE_CATEGORIES.map((category, index) => {
+              const iconColors = [colors.primary, colors.secondary, '#8B5CF6', colors.accent, '#EC4899', '#06B6D4', '#10B981', '#F59E0B'];
+              const bgColors = [
+                ['#EEF6FF', '#DBEAFE'],
+                ['#E0FFF4', '#CCFBF1'],
+                ['#F3E8FF', '#E9D5FF'],
+                ['#FFF7ED', '#FFEDD5'],
+                ['#FCE7F3', '#FBCFE8'],
+                ['#E0F7FA', '#B2EBF2'],
+                ['#ECFDF5', '#D1FAE5'],
+                ['#FFFBEB', '#FEF3C7'],
+              ];
+              // Pass the actual specializations array to the doctors page
+              const specializations = category.specializations;
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  style={styles.specialtyCard}
+                  onPress={() => router.push({
+                    pathname: '/(user)/doctors',
+                    params: { specialization: specializations.join(',') }
+                  })}
+                >
+                  <LinearGradient
+                    colors={bgColors[index % bgColors.length] as [string, string]}
+                    style={styles.specialtyIconBg}
+                  >
+                    <Ionicons name={category.icon as any} size={24} color={iconColors[index % iconColors.length]} />
+                  </LinearGradient>
+                  <View style={styles.specialtyInfo}>
+                    <Text style={styles.specialtyName}>{category.name}</Text>
+                    <Text style={styles.specialtyCount}>{specializations.length > 1 ? `${specializations.length} types` : specializations[0]}</Text>
                   </View>
-                  <View style={styles.doctorDetails}>
-                    <Text style={styles.doctorNameLarge}>{doctor.name}</Text>
-                    <Text style={styles.doctorSpecLarge}>{doctor.specialization}</Text>
-                    <View style={styles.doctorMeta}>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
-                        <Text style={styles.metaText}>{doctor.experience} yrs</Text>
-                      </View>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="star" size={12} color="#FFB800" />
-                        <Text style={styles.metaText}>{(doctor.rating ?? 4.0).toFixed(1)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.doctorFee}>
-                    <Text style={styles.feeAmount}>₹{Math.round((doctor.consultation_fee || 0) * (1 + COMMISSION_RATE))}</Text>
-                    <Ionicons name="chevron-forward" size={18} color={colors.primary} />
-                  </View>
-                </View>
-              </Card>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="medkit-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>No doctors available here</Text>
-              <Text style={styles.emptySubtext}>Try changing your location or checking later</Text>
-            </View>
-          )}
+                  <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         {/* Nearby Hospitals */}
@@ -654,9 +630,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#FFF',
+  },
+  greetingSubtext: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
   },
   waveIcon: {
     marginLeft: 8,
@@ -824,6 +805,48 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   serviceCount: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  serviceCountHighlight: {
+    fontSize: 12,
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  specialtyGrid: {
+    gap: 10,
+  },
+  specialtyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  specialtyIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  specialtyInfo: {
+    flex: 1,
+  },
+  specialtyName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  specialtyCount: {
     fontSize: 12,
     color: colors.textSecondary,
   },

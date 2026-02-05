@@ -48,7 +48,229 @@ async def startup_cache_hospitals():
         await fetch_and_cache_osm_hospitals()
     except Exception as exc:
         logger.warning("Startup OSM hospital fetch failed: %s", exc)
+    
+    # Add known hospitals that might be missing from OSM
+    await add_known_hospitals()
+    
     asyncio.create_task(reminder_worker())
+
+
+# Known hospitals in Kanyakumari district that might be missing from OSM
+KNOWN_HOSPITALS = [
+    {
+        "name": "Lifecare Hospital Parvathipuram",
+        "locality": "Parvathipuram",
+        "city": "Nagercoil",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1833,
+        "longitude": 77.4119,
+    },
+    {
+        "name": "Kanyakumari Government Medical College Hospital",
+        "locality": "Asaripallam",
+        "city": "Nagercoil",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1903,
+        "longitude": 77.4294,
+    },
+    {
+        "name": "CSI Mission Hospital",
+        "locality": "Neyyoor",
+        "city": "Neyyoor",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.2481,
+        "longitude": 77.3128,
+    },
+    {
+        "name": "Trivandrum Medical College",
+        "locality": "Ulloor",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.5241,
+        "longitude": 76.9366,
+    },
+    {
+        "name": "KIMS Hospital",
+        "locality": "Anayara",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.4934,
+        "longitude": 76.9597,
+    },
+    {
+        "name": "SK Hospital",
+        "locality": "Edaicode",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.4812,
+        "longitude": 76.9701,
+    },
+    {
+        "name": "Ananthapuri Hospital",
+        "locality": "Chackai",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.5133,
+        "longitude": 76.9444,
+    },
+    {
+        "name": "Dr. Agarwal's Eye Hospital",
+        "locality": "Nagercoil",
+        "city": "Nagercoil",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1780,
+        "longitude": 77.4350,
+    },
+    {
+        "name": "Karikuzhi Hospital",
+        "locality": "Karungal",
+        "city": "Karungal",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.2356,
+        "longitude": 77.2789,
+    },
+    {
+        "name": "Alpha Hospital",
+        "locality": "Nagercoil",
+        "city": "Nagercoil",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1790,
+        "longitude": 77.4280,
+    },
+    {
+        "name": "Rajam Hospital",
+        "locality": "Marthandam",
+        "city": "Marthandam",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.3076,
+        "longitude": 77.2206,
+    },
+    {
+        "name": "Sree Gokulam Medical College",
+        "locality": "Venjaramoodu",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.4139,
+        "longitude": 77.0294,
+    },
+    {
+        "name": "PRS Hospital",
+        "locality": "Killipalam",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",
+        "state": "Kerala",
+        "latitude": 8.4977,
+        "longitude": 76.9606,
+    },
+    {
+        "name": "SUT Hospital",
+        "locality": "Pattom",
+        "city": "Thiruvananthapuram",
+        "district": "Thiruvananthapuram",  
+        "state": "Kerala",
+        "latitude": 8.5213,
+        "longitude": 76.9456,
+    },
+    {
+        "name": "Holy Cross Hospital",
+        "locality": "Thuckalay",
+        "city": "Thuckalay",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.2427,
+        "longitude": 77.2603,
+    },
+    {
+        "name": "SNV Hospital",
+        "locality": "Nagercoil",
+        "city": "Nagercoil",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1805,
+        "longitude": 77.4325,
+    },
+    {
+        "name": "Daniel Thomas Memorial Hospital",
+        "locality": "Colachel",
+        "city": "Colachel",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.1762,
+        "longitude": 77.2565,
+    },
+    {
+        "name": "Matha Hospital",
+        "locality": "Eraniel",
+        "city": "Eraniel",
+        "district": "Kanyakumari",
+        "state": "Tamil Nadu",
+        "latitude": 8.2289,
+        "longitude": 77.2878,
+    },
+    {
+        "name": "Bishop Benziger Hospital",
+        "locality": "Kollam",
+        "city": "Kollam",
+        "district": "Kollam",
+        "state": "Kerala",
+        "latitude": 8.8932,
+        "longitude": 76.6141,
+    },
+    {
+        "name": "Upasana Hospital",
+        "locality": "Kollam",
+        "city": "Kollam",
+        "district": "Kollam",
+        "state": "Kerala",
+        "latitude": 8.8876,
+        "longitude": 76.5888,
+    },
+]
+
+
+async def add_known_hospitals():
+    """Add known hospitals that might be missing from OSM data."""
+    import re
+    added_count = 0
+    for hospital in KNOWN_HOSPITALS:
+        # Escape special regex characters in the name
+        escaped_name = re.escape(hospital['name'])
+        # Check if hospital already exists by name (case-insensitive)
+        existing = await db.hospital_master.find_one({
+            "name": {"$regex": f"^{escaped_name}$", "$options": "i"}
+        })
+        if not existing:
+            hospital_data = {
+                "id": str(uuid.uuid4()),
+                "name": hospital["name"],
+                "latitude": hospital.get("latitude", 0.0),
+                "longitude": hospital.get("longitude", 0.0),
+                "locality": hospital.get("locality"),
+                "street": hospital.get("street"),
+                "city": hospital.get("city"),
+                "district": hospital.get("district"),
+                "state": hospital.get("state"),
+                "postcode": hospital.get("postcode"),
+                "created_at": datetime.utcnow(),
+            }
+            await db.hospital_master.insert_one(hospital_data)
+            added_count += 1
+            logger.info(f"Added known hospital: {hospital['name']}")
+        else:
+            logger.debug(f"Hospital already exists: {hospital['name']}")
+    logger.info(f"Added {added_count} known hospitals")
 
 
 # ==================== MODELS ====================
@@ -555,12 +777,19 @@ async def get_doctor(doctor_id: str):
 # ==================== HOSPITAL MASTER (OSM) ====================
 
 @api_router.get("/osm-hospitals", response_model=List[HospitalMaster])
-async def get_osm_hospitals():
+async def get_osm_hospitals(search: Optional[str] = None):
     try:
         await fetch_and_cache_osm_hospitals()
     except Exception as exc:
         logger.warning("OSM hospital fetch failed: %s", exc)
-    items = await db.hospital_master.find({}).to_list(5000)
+    
+    query = {}
+    if search:
+        # Remove spaces and make case-insensitive search
+        search_pattern = search.replace(" ", ".*")
+        query["name"] = {"$regex": search_pattern, "$options": "i"}
+    
+    items = await db.hospital_master.find(query).to_list(None)
     return [HospitalMaster(**h) for h in items]
 
 @api_router.get("/osm-hospitals/{hospital_id}/reverse", response_model=HospitalMaster)
@@ -590,6 +819,12 @@ async def refresh_osm_hospitals():
     except Exception as exc:
         logger.warning("OSM hospital refresh failed: %s", exc)
         raise HTTPException(status_code=500, detail="OSM refresh failed")
+
+@api_router.post("/osm-hospitals/add-known")
+async def add_known_hospitals_endpoint():
+    """Manually add all known hospitals from the predefined list."""
+    await add_known_hospitals()
+    return {"message": "Known hospitals added successfully", "count": len(KNOWN_HOSPITALS)}
 
 @api_router.post("/doctor-hospitals")
 async def save_doctor_hospitals(selection: DoctorHospitalSelection):
@@ -635,6 +870,55 @@ async def get_hospital_doctors(hospital_id: str):
         return []
     items = await db.users.find({"id": {"$in": doctor_ids}, "role": "doctor"}).to_list(2000)
     return [UserResponse(**d) for d in items]
+
+
+class CustomHospitalCreate(BaseModel):
+    name: str
+    address: str
+    city: str
+    area: str
+    phone: str
+    doctor_id: str
+
+
+@api_router.post("/custom-hospitals")
+async def add_custom_hospital(data: CustomHospitalCreate):
+    """
+    Add a custom hospital (not from OSM) when doctor can't find their hospital.
+    """
+    doctor = await db.users.find_one({"id": data.doctor_id, "role": "doctor"})
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    
+    # Create hospital in hospital_master with 0,0 coordinates (custom hospital)
+    hospital_id = str(uuid.uuid4())
+    hospital_data = {
+        "id": hospital_id,
+        "name": data.name,
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "locality": data.area,
+        "street": data.address,
+        "city": data.city,
+        "district": None,
+        "state": None,
+        "postcode": None,
+        "phone": data.phone,
+        "is_custom": True,  # Mark as custom hospital
+        "created_at": datetime.utcnow(),
+    }
+    
+    await db.hospital_master.insert_one(hospital_data)
+    
+    # Link doctor to this hospital
+    await db.doctor_hospitals.insert_one({
+        "id": str(uuid.uuid4()),
+        "doctor_id": data.doctor_id,
+        "hospital_id": hospital_id,
+        "created_at": datetime.utcnow(),
+    })
+    
+    return {"hospital_id": hospital_id, "message": "Custom hospital added successfully"}
 
 
 # ==================== APPOINTMENTS ====================

@@ -171,7 +171,7 @@ export default function Hospitals() {
               const data = await res.json();
               return [h.id, data] as const;
             }
-          } catch {}
+          } catch { }
           return [h.id, null] as const;
         })
       );
@@ -338,7 +338,16 @@ export default function Hospitals() {
             ) : (
               <View style={styles.doctorsList}>
                 {doctorsForSelected.length > 0 ? (
-                  doctorsForSelected.map((doc) => <DoctorCard key={doc.id} doctor={doc} />)
+                  doctorsForSelected.map((doc) => (
+                    <DoctorCard
+                      key={doc.id}
+                      doctor={doc}
+                      onPress={() => {
+                        setDoctorModalOpen(false);
+                        router.push({ pathname: '/(user)/booking', params: { doctorId: doc.id } });
+                      }}
+                    />
+                  ))
                 ) : (
                   <View style={styles.emptyState}>
                     <Ionicons name="people-outline" size={64} color={colors.textLight} />
@@ -355,19 +364,42 @@ export default function Hospitals() {
   );
 }
 
-const DoctorCard = ({ doctor }: { doctor: Doctor }) => (
-  <Card style={styles.doctorCard} elevation="medium">
-    <View style={styles.doctorRow}>
-      <View style={styles.doctorAvatar}>
-        <Ionicons name="person-outline" size={24} color={colors.primary} />
+const DoctorCard = ({ doctor, onPress }: { doctor: Doctor; onPress: () => void }) => (
+  <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+    <Card style={styles.doctorCard} elevation="medium">
+      <View style={styles.doctorRow}>
+        <View style={styles.doctorAvatar}>
+          <Ionicons name="person" size={26} color={colors.primary} />
+        </View>
+        <View style={styles.doctorInfo}>
+          <Text style={styles.doctorName}>{doctor.name}</Text>
+          <Text style={styles.doctorSpec}>{doctor.specialization}</Text>
+          <View style={styles.doctorMetaRow}>
+            <View style={styles.ratingBadge}>
+              <Ionicons name="star" size={12} color="#FFB800" />
+              <Text style={styles.ratingText}>{doctor.rating?.toFixed(1) || '4.0'}</Text>
+            </View>
+            <Text style={styles.doctorMetaSep}>•</Text>
+            <Text style={styles.doctorMeta}>{doctor.experience} yrs exp</Text>
+          </View>
+        </View>
+        <View style={styles.doctorPriceSection}>
+          <Text style={styles.doctorFeeLabel}>Fee</Text>
+          <Text style={styles.doctorFee}>₹{doctor.consultation_fee}</Text>
+        </View>
       </View>
-      <View style={styles.doctorInfo}>
-        <Text style={styles.doctorName}>{doctor.name}</Text>
-        <Text style={styles.doctorSpec}>{doctor.specialization}</Text>
-        <Text style={styles.doctorMeta}>₹{doctor.consultation_fee} • {doctor.experience} yrs exp</Text>
+      <View style={styles.doctorActions}>
+        <TouchableOpacity style={styles.viewProfileBtn} onPress={onPress}>
+          <Ionicons name="eye-outline" size={16} color={colors.primary} />
+          <Text style={styles.viewProfileText}>View</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bookDoctorBtn} onPress={onPress}>
+          <Ionicons name="calendar-outline" size={16} color="#FFF" />
+          <Text style={styles.bookDoctorText}>Book Now</Text>
+        </TouchableOpacity>
       </View>
-    </View>
-  </Card>
+    </Card>
+  </TouchableOpacity>
 );
 
 const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -648,7 +680,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   doctorName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
   },
@@ -657,9 +689,89 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
+  doctorMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 6,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFF9E6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  ratingText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#B8860B',
+  },
+  doctorMetaSep: {
+    fontSize: 12,
+    color: colors.textLight,
+  },
   doctorMeta: {
     fontSize: 12,
     color: colors.textLight,
-    marginTop: 4,
+  },
+  doctorPriceSection: {
+    alignItems: 'flex-end',
+  },
+  doctorFeeLabel: {
+    fontSize: 10,
+    color: colors.textLight,
+    textTransform: 'uppercase',
+  },
+  doctorFee: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 2,
+  },
+  doctorActions: {
+    flexDirection: 'row',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 10,
+  },
+  viewProfileBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primary + '10',
+    gap: 6,
+  },
+  viewProfileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  bookDoctorBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    gap: 6,
+  },
+  bookDoctorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
   },
 });

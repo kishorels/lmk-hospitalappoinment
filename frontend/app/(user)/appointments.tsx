@@ -149,7 +149,16 @@ export default function Appointments() {
                     </View>
                   )}
                   {appt.type === 'video' && appt.status === 'accepted' && (
-                    <TouchableOpacity style={styles.joinButton}>
+                    <TouchableOpacity
+                      style={styles.joinButton}
+                      onPress={() => router.push({
+                        pathname: '/video-call',
+                        params: {
+                          appointmentId: appt.id,
+                          doctorName: appt.doctor_name,
+                        }
+                      })}
+                    >
                       <Ionicons name="videocam" size={20} color="#FFF" />
                       <Text style={styles.joinButtonText}>Join Video Call</Text>
                     </TouchableOpacity>
@@ -164,7 +173,7 @@ export default function Appointments() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>My Appointments</Text>
       </View>
@@ -204,12 +213,14 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingVertical: 16,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.text,
   },
   listContent: {

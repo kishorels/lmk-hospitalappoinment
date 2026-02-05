@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useAuth } from '../../src/context/AuthContext';
@@ -17,6 +18,7 @@ interface Patient {
 }
 
 export default function MyPatients() {
+    const router = useRouter();
     const { user } = useAuth();
     const { appointments, getDoctorAppointments, doctors, isLoading, getPatientTimeline } = useData();
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -238,25 +240,32 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
     },
     backBtn: {
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: colors.background,
         justifyContent: 'center',
         alignItems: 'center',
     },
     title: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: colors.text,
+        textAlign: 'center',
     },
     statsContainer: {
         flexDirection: 'row',
         paddingHorizontal: 20,
+        paddingTop: 20,
         gap: 12,
-        marginBottom: 16,
+        marginBottom: 8,
     },
     statCard: {
         flex: 1,

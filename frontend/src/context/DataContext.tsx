@@ -74,14 +74,22 @@ export interface Appointment {
 
 // Disease Categories (static, for UI only)
 export const DISEASE_CATEGORIES = [
-  { id: '1', name: 'General', icon: 'medkit', specializations: ['General Physician'] },
-  { id: '2', name: 'Heart', icon: 'heart', specializations: ['Cardiologist'] },
-  { id: '3', name: 'Brain', icon: 'fitness', specializations: ['Neurologist'] },
-  { id: '4', name: 'Bones', icon: 'body', specializations: ['Orthopedic'] },
-  { id: '5', name: 'Skin', icon: 'hand-left', specializations: ['Dermatologist'] },
+  { id: '1', name: 'General', icon: 'medkit', specializations: ['General Physician', 'Family Medicine', 'Internal Medicine'] },
+  { id: '2', name: 'Heart', icon: 'heart', specializations: ['Cardiologist', 'Interventional Cardiologist'] },
+  { id: '3', name: 'Brain', icon: 'fitness', specializations: ['Neurologist', 'Neurosurgeon', 'Psychiatrist'] },
+  { id: '4', name: 'Bones', icon: 'body', specializations: ['Orthopedic', 'Orthopedic Surgeon', 'Rheumatologist'] },
+  { id: '5', name: 'Skin', icon: 'hand-left', specializations: ['Dermatologist', 'Plastic Surgeon'] },
   { id: '6', name: 'Eyes', icon: 'eye', specializations: ['Ophthalmologist'] },
-  { id: '7', name: 'Teeth', icon: 'happy', specializations: ['Dentist'] },
-  { id: '8', name: 'Kids', icon: 'people', specializations: ['Pediatrician'] },
+  { id: '7', name: 'Teeth', icon: 'happy', specializations: ['Dentist', 'Orthodontist'] },
+  { id: '8', name: 'Kids', icon: 'people', specializations: ['Pediatrician', 'Pediatric Surgeon'] },
+  { id: '9', name: 'Women', icon: 'woman', specializations: ['Gynecologist', 'Obstetrician'] },
+  { id: '10', name: 'ENT', icon: 'ear', specializations: ['ENT Specialist', 'Audiologist'] },
+  { id: '11', name: 'Stomach', icon: 'restaurant', specializations: ['Gastroenterologist', 'General Surgeon'] },
+  { id: '12', name: 'Lungs', icon: 'cloudy', specializations: ['Pulmonologist', 'Allergist/Immunologist'] },
+  { id: '13', name: 'Kidney', icon: 'water', specializations: ['Nephrologist', 'Urologist'] },
+  { id: '14', name: 'Cancer', icon: 'pulse', specializations: ['Oncologist', 'Hematologist'] },
+  { id: '15', name: 'Diabetes', icon: 'analytics', specializations: ['Diabetologist', 'Endocrinologist'] },
+  { id: '16', name: 'Diet', icon: 'nutrition', specializations: ['Dietitian/Nutritionist'] },
 ];
 
 interface DataContextType {
@@ -132,6 +140,7 @@ interface DataContextType {
   getUserReminders: (userId: string) => Promise<any[]>;
   deleteReminder: (reminderId: string) => Promise<boolean>;
   toggleReminder: (reminderId: string, active: boolean) => Promise<boolean>;
+  addCustomHospital: (data: { name: string; address: string; city: string; area: string; phone: string; doctor_id: string }) => Promise<boolean>;
 }
 
 export const COMMISSION_RATE = 0.1; // 10%
@@ -452,6 +461,22 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return false;
   };
 
+  const addCustomHospital = async (data: { name: string; address: string; city: string; area: string; phone: string; doctor_id: string }) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/custom-hospitals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        return true;
+      }
+    } catch (error) {
+      console.error('Error adding custom hospital:', error);
+    }
+    return false;
+  };
+
   return (
     <DataContext.Provider value={{
       hospitals,
@@ -483,6 +508,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       getUserReminders,
       deleteReminder,
       toggleReminder,
+      addCustomHospital,
     }}>
       {children}
     </DataContext.Provider>

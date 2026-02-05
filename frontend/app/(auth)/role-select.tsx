@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme/colors';
 
-type Role = 'user' | 'hospital' | 'doctor';
+type Role = 'user' | 'doctor';
 
 interface RoleOption {
   id: Role;
@@ -22,13 +22,6 @@ const roles: RoleOption[] = [
     description: 'Find doctors, book appointments, and manage your health',
     icon: 'person',
     color: colors.userPrimary,
-  },
-  {
-    id: 'hospital',
-    title: 'Hospital',
-    description: 'Register your hospital and manage doctors',
-    icon: 'business',
-    color: colors.hospitalPrimary,
   },
   {
     id: 'doctor',

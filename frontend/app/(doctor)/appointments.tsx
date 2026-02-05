@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Modal, TextInput, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -11,6 +12,7 @@ import { colors } from '../../src/theme/colors';
 type FilterType = 'all' | 'pending' | 'accepted' | 'rejected' | 'completed';
 
 export default function DoctorAppointments() {
+    const router = useRouter();
     const { user } = useAuth();
     const {
         appointments,
@@ -174,10 +176,12 @@ export default function DoctorAppointments() {
     const keyExtractor = useCallback((item: Appointment) => item.id, []);
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.title}>Appointments</Text>
-                <Text style={styles.subtitle}>{filteredAppointments.length} total</Text>
+                <View>
+                    <Text style={styles.title}>Appointments</Text>
+                    <Text style={styles.subtitle}>{filteredAppointments.length} total</Text>
+                </View>
             </View>
 
             <View style={styles.filterContainer}>
@@ -380,71 +384,107 @@ const AppointmentCard = React.memo(({
     onAccept: (id: string) => void;
     onReject: (id: string) => void;
     onOpenRecord: (appointment: Appointment) => void;
-    getStatusVariant: (status: Appointment['status']) => string;
-}) => (
-    <Card style={styles.appointmentCard}>
-        <View style={styles.cardHeader}>
-            <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
-            <Badge text={item.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
-        </View>
+    getStatusVariant: (status: Appointment['status']) => 'success' | 'warning' | 'error' | 'info' | 'default';
+}) => {
+    const router = useRouter();
+    return (
+        <Card style={styles.appointmentCard}>
+            <View style={styles.cardHeader}>
+                <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
+                <Badge text={item.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
+            </View>
 
-        <View style={styles.patientRow}>
-            <View style={styles.patientAvatar}>
-                <Ionicons name="person" size={24} color={colors.primary} />
+            <View style={styles.patientRow}>
+                <View style={styles.patientAvatar}>
+                    <Ionicons name="person" size={24} color={colors.primary} />
+                </View>
+                <View style={styles.patientInfoWrapper}>
+                    <Text style={styles.patientName}>{item.user_name}</Text>
+                    {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
+                </View>
             </View>
-            <View style={styles.patientInfo}>
-                <Text style={styles.patientName}>{item.user_name}</Text>
-                {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
-            </View>
-        </View>
 
-        <View style={styles.detailsContainer}>
-            <View style={styles.detailRow}>
-                <Ionicons name="calendar" size={18} color={colors.textLight} />
-                <Text style={styles.detailText}>{format(new Date(item.date), 'EEEE, MMM d, yyyy')}</Text>
+            <View style={styles.detailsContainer}>
+                <View style={styles.detailRow}>
+                    <Ionicons name="calendar" size={18} color={colors.textLight} />
+                    <Text style={styles.detailText}>{format(new Date(item.date), 'EEEE, MMM d, yyyy')}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                    <Ionicons name="time" size={18} color={colors.textLight} />
+                    <Text style={styles.detailText}>{item.time_slot}</Text>
+                </View>
             </View>
-            <View style={styles.detailRow}>
-                <Ionicons name="time" size={18} color={colors.textLight} />
-                <Text style={styles.detailText}>{item.time_slot}</Text>
-            </View>
-        </View>
 
-        {item.status === 'pending' && (
-            <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => onAccept(item.id)}>
-                    <Ionicons name="checkmark" size={20} color="#FFF" />
-                    <Text style={styles.actionBtnText}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => onReject(item.id)}>
-                    <Ionicons name="close" size={20} color="#FFF" />
-                    <Text style={styles.actionBtnText}>Reject</Text>
-                </TouchableOpacity>
-            </View>
-        )}
-        {(item.status === 'accepted' || item.status === 'completed') && (
-            <TouchableOpacity style={styles.recordBtn} onPress={() => onOpenRecord(item)}>
-                <Ionicons name="document-text" size={18} color="#FFF" />
-                <Text style={styles.recordBtnText}>Add Record</Text>
-            </TouchableOpacity>
-        )}
-    </Card>
-));
+            {item.status === 'pending' && (
+                <View style={styles.actionButtons}>
+                    <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => onAccept(item.id)}>
+                        <Ionicons name="checkmark" size={20} color="#FFF" />
+                        <Text style={styles.actionBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => onReject(item.id)}>
+                        <Ionicons name="close" size={20} color="#FFF" />
+                        <Text style={styles.actionBtnText}>Reject</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+            {(item.status === 'accepted' || item.status === 'completed') && (
+                <View style={styles.cardFooterActions}>
+                    {item.type === 'video' && item.status === 'accepted' && (
+                        <TouchableOpacity
+                            style={[styles.actionBtn, styles.joinBtn]}
+                            onPress={() => router.push({
+                                pathname: '/video-call',
+                                params: {
+                                    appointmentId: item.id,
+                                    patientName: item.user_name,
+                                }
+                            })}
+                        >
+                            <Ionicons name="videocam" size={20} color="#FFF" />
+                            <Text style={styles.actionBtnText}>Join Call</Text>
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.recordBtn} onPress={() => onOpenRecord(item)}>
+                        <Ionicons name="document-text" size={18} color="#FFF" />
+                        <Text style={styles.recordBtnText}>Add Record</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </Card>
+    );
+});
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    header: { padding: 20 },
-    title: { fontSize: 28, fontWeight: 'bold' },
-    subtitle: { fontSize: 14, color: colors.textSecondary },
-    filterContainer: { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 10 },
-    filterTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.surface },
-    filterTabActive: { backgroundColor: colors.doctorPrimary },
-    filterText: { fontSize: 13, color: colors.textSecondary },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    title: { fontSize: 20, fontWeight: '700', color: colors.text },
+    subtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    filterContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        gap: 8,
+        backgroundColor: colors.surface,
+    },
+    filterTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+    filterTabActive: { backgroundColor: colors.doctorPrimary, borderColor: colors.doctorPrimary },
+    filterText: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
     filterTextActive: { color: '#FFF' },
-    listContent: { padding: 20 },
+    listContent: { padding: 20, paddingTop: 16 },
     appointmentCard: { marginBottom: 16 },
     cardHeader: { flexDirection: 'row', gap: 8, marginBottom: 12 },
     patientRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     patientAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary + '15', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    patientInfoWrapper: { flex: 1 },
     patientName: { fontSize: 16, fontWeight: '600' },
     reasonText: { fontSize: 13, color: colors.textSecondary },
     detailsContainer: { backgroundColor: colors.background, padding: 12, borderRadius: 12, gap: 8 },
@@ -455,8 +495,10 @@ const styles = StyleSheet.create({
     acceptBtn: { backgroundColor: colors.success },
     rejectBtn: { backgroundColor: colors.error },
     actionBtnText: { color: '#FFF', fontWeight: '600' },
-    recordBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.primary, marginTop: 10 },
+    recordBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.primary },
     recordBtnText: { color: '#FFF', fontWeight: '700' },
+    cardFooterActions: { flexDirection: 'row', gap: 12, marginTop: 10 },
+    joinBtn: { backgroundColor: colors.secondary || '#10B981', flex: 1 },
     emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     emptyTitle: { fontSize: 18, color: colors.textSecondary, marginTop: 12 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

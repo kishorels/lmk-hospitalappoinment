@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useData, Doctor, DISEASE_CATEGORIES, COMMISSION_RATE } from '../../src/context/DataContext';
+import { useData, Doctor, Hospital, DISEASE_CATEGORIES, COMMISSION_RATE } from '../../src/context/DataContext';
 import { Card, Badge } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
@@ -27,6 +27,13 @@ export default function Doctors() {
   const [showHospitalModal, setShowHospitalModal] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [hospitalSearch, setHospitalSearch] = useState('');
+
+  // Update selectedSpec when URL param changes
+  useEffect(() => {
+    if (urlSpec) {
+      setSelectedSpec(urlSpec);
+    }
+  }, [urlSpec]);
 
   // Get unique locations from hospitals where doctors are available
   // Get all unique locations from hospitals and doctors
@@ -80,8 +87,13 @@ export default function Doctors() {
     }
 
     // Filter by selected specialization (from URL or chip)
+    // Handle comma-separated specializations (e.g., "Cardiologist,Interventional Cardiologist")
     if (selectedSpec) {
-      result = result.filter(d => (d.specialization?.toLowerCase() || '').includes(selectedSpec.toLowerCase()));
+      const specs = selectedSpec.split(',').map(s => s.trim().toLowerCase());
+      result = result.filter(d => {
+        const docSpec = (d.specialization?.toLowerCase() || '');
+        return specs.some(spec => docSpec.includes(spec));
+      });
     }
 
     // Filter by search query
@@ -98,10 +110,12 @@ export default function Doctors() {
 
   const filteredHospitals = useMemo(() => {
     if (!hospitalSearch) return hospitals;
-    return hospitals.filter(h =>
-      (h.name?.toLowerCase() || '').includes(hospitalSearch.toLowerCase()) ||
-      (h.area?.toLowerCase() || '').includes(hospitalSearch.toLowerCase())
-    );
+    const q = hospitalSearch.toLowerCase().replace(/\s+/g, '');
+    return hospitals.filter(h => {
+      const name = (h.name || '').toLowerCase().replace(/\s+/g, '');
+      const area = (h.area || '').toLowerCase().replace(/\s+/g, '');
+      return name.includes(q) || area.includes(q);
+    });
   }, [hospitals, hospitalSearch]);
 
   const clearLocationFilter = () => {
@@ -182,8 +196,25 @@ export default function Doctors() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>
-          {selectedSpec ? selectedSpec : 'All Doctors'}
+        <Text style={styles.title} numberOfLines={1}>
+          {selectedSpec
+            ? (() => {
+              // Find matching category name for cleaner display
+              const matchingCategory = DISEASE_CATEGORIES.find(cat =>
+                cat.specializations.some(s => selectedSpec.toLowerCase().includes(s.toLowerCase()))
+              );
+              if (matchingCategory) {
+                return `${matchingCategory.name} Specialists`;
+              }
+              // If it's comma-separated, show first one + count
+              if (selectedSpec.includes(',')) {
+                const specs = selectedSpec.split(',');
+                return `${specs[0].trim()} +${specs.length - 1}`;
+              }
+              return selectedSpec;
+            })()
+            : 'All Doctors'
+          }
         </Text>
         <View style={{ width: 44 }} />
       </View>
@@ -491,19 +522,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   backBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
-    fontSize: 20,
+    flex: 1,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
+    marginHorizontal: 8,
   },
   searchContainer: {
     flexDirection: 'row',
