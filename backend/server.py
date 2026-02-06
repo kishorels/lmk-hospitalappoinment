@@ -360,7 +360,10 @@ class Appointment(BaseModel):
     time_slot: str
     type: str = "in-person"
     reason: Optional[str] = None
-    status: str = "pending"
+    status: str = "pending"  # pending, accepted, paid, completed, rejected
+    payment_status: str = "unpaid"  # unpaid, paid
+    payment_amount: Optional[float] = None
+    payment_date: Optional[datetime] = None
     suggested_date: Optional[str] = None
     suggested_time: Optional[str] = None
     doctor_note: Optional[str] = None
@@ -962,6 +965,7 @@ async def update_appointment_record(appointment_id: str, record: AppointmentReco
         raise HTTPException(status_code=403, detail="Not allowed")
     update_data = record.dict(exclude_unset=True)
     update_data.pop("doctor_id", None)
+    update_data["status"] = "completed"
     update_data["updated_at"] = datetime.utcnow()
     await db.appointments.update_one({"id": appointment_id}, {"$set": update_data})
     updated = await db.appointments.find_one({"id": appointment_id})
@@ -974,6 +978,41 @@ async def get_patient_timeline(doctor_id: str, patient_id: str):
         "user_id": patient_id
     }).sort("date", 1).to_list(1000)
     return [Appointment(**a) for a in items]
+
+
+class PaymentRequest(BaseModel):
+    user_id: str
+    amount: float
+
+
+@api_router.post("/appointments/{appointment_id}/pay")
+async def process_payment(appointment_id: str, payment: PaymentRequest):
+    """Process payment for an accepted appointment"""
+    appt = await db.appointments.find_one({"id": appointment_id})
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    
+    if appt.get("user_id") != payment.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to pay for this appointment")
+    
+    if appt.get("status") != "accepted":
+        raise HTTPException(status_code=400, detail="Appointment must be accepted before payment")
+    
+    if appt.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Appointment is already paid")
+    
+    # Update payment status
+    update_data = {
+        "payment_status": "paid",
+        "payment_amount": payment.amount,
+        "payment_date": datetime.utcnow(),
+        "status": "paid",  # Change status to paid after successful payment
+        "updated_at": datetime.utcnow()
+    }
+    
+    await db.appointments.update_one({"id": appointment_id}, {"$set": update_data})
+    updated = await db.appointments.find_one({"id": appointment_id})
+    return Appointment(**updated)
 
 @api_router.post("/push/register")
 async def register_push_token(payload: PushTokenRegister):
