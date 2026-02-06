@@ -48,7 +48,8 @@ export default function Reminders() {
         body: JSON.stringify({ user_id: user?.id, expo_push_token: token }),
       });
     } catch (error) {
-      console.error('Push token error:', error);
+      // Log as warning rather than error to avoid distracting in dev builds
+      console.warn('Push token setup skipped (likely missing Firebase config for Dev Client)');
     }
   };
 

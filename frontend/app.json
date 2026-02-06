@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "MedBook",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "medbook",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -18,7 +18,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "CAMERA",
@@ -29,7 +29,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "edgeToEdgeEnabled": true,
-      "package": "com.kishorelm.frontend"
+      "package": "com.kishorelm.medbook"
     },
     "web": {
       "bundler": "metro",
@@ -44,11 +44,26 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-camera",
-      "expo-av"
+      "expo-av",
+      "expo-font",
+      "expo-web-browser",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "packagingOptions": {
+              "pickFirst": [
+                "**/libaosl.so"
+              ]
+            }
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -58,6 +73,7 @@
       "eas": {
         "projectId": "ef0f2a28-f354-40c1-9c60-1ebd750acf36"
       }
-    }
+    },
+    "owner": "kishorelm"
   }
 }

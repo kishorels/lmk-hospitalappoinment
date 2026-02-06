@@ -105,7 +105,7 @@ export default function UserLayout() {
           }}
         />
         <Tabs.Screen
-          name="appointments"
+          name="user-appointments"
           options={{
             title: 'Appointments',
             tabBarIcon: ({ color, size }) => (
@@ -196,6 +196,12 @@ export default function UserLayout() {
         />
         <Tabs.Screen
           name="ai-chat"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="payment"
           options={{
             href: null,
           }}

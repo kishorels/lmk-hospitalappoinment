@@ -255,7 +255,7 @@ export default function UserHome() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
-              <TouchableOpacity onPress={() => router.push('/(user)/appointments')}>
+              <TouchableOpacity onPress={() => router.push('/(user)/user-appointments')}>
                 <Text style={styles.seeAll}>See All</Text>
               </TouchableOpacity>
             </View>
@@ -331,7 +331,7 @@ export default function UserHome() {
 
             <TouchableOpacity
               style={styles.serviceCard}
-              onPress={() => router.push('/(user)/appointments')}
+              onPress={() => router.push('/(user)/user-appointments')}
             >
               <LinearGradient
                 colors={['#FFF7ED', '#FFEDD5']}

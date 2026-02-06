@@ -1,0 +1,29 @@
+  --non-interactive is not supported, use $CI=1 instead
+env: load .env
+env: export EXPO_PUBLIC_BACKEND_URL EXPO_PUBLIC_AGORA_APP_ID
+Starting project at /home/user/Documents/react-study/lmk-hospitalappoinment/frontend
+Starting Metro Bundler
+Waiting on http://localhost:8089
+Logs for your project will appear below.
+Error: ENOENT: no such file or directory, open '/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/.expo/types/router.d.ts'
+    at Object.writeFileSync (node:fs:2426:20)
+    at /home/user/Documents/react-study/lmk-hospitalappoinment/frontend/node_modules/expo-router/src/typed-routes/index.ts:90:10
+    at Timeout._onTimeout (/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/node_modules/expo-router/src/typed-routes/index.ts:109:7)
+    at listOnTimeout (node:internal/timers:588:17)
+    at processTimers (node:internal/timers:523:7) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/.expo/types/router.d.ts'
+}
+Error: ENOENT: no such file or directory, open '/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/.expo/types/router.d.ts'
+    at Object.writeFileSync (node:fs:2426:20)
+    at /home/user/Documents/react-study/lmk-hospitalappoinment/frontend/node_modules/expo-router/src/typed-routes/index.ts:90:10
+    at Timeout._onTimeout (/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/node_modules/expo-router/src/typed-routes/index.ts:109:7)
+    at listOnTimeout (node:internal/timers:588:17)
+    at processTimers (node:internal/timers:523:7) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/user/Documents/react-study/lmk-hospitalappoinment/frontend/.expo/types/router.d.ts'
+}

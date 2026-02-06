@@ -117,8 +117,11 @@ export default function Hospitals() {
       });
       if (geocodes && geocodes.length > 0) {
         const g = geocodes[0];
-        const parts = [g.city, g.subregion, g.region, g.country].filter(Boolean);
-        setUserAddress(parts.join(', '));
+        // Prioritize specific area names
+        const parts = [g.name, g.street, g.district, g.city, g.subregion].filter(Boolean);
+        // If too short, add region
+        if (parts.length < 2) parts.push(g.region);
+        setUserAddress(parts.slice(0, 3).join(', '));
       }
     } finally {
       setIsLocating(false);
@@ -161,6 +164,9 @@ export default function Hospitals() {
     if (filteredHospitals.length === 0) return;
     let cancelled = false;
     const run = async () => {
+      // Prefetch doctors for top visible hospitals
+      filteredHospitals.slice(0, 10).forEach(h => getDoctorsForHospital(h.id));
+
       const needs = filteredHospitals.filter(h => !h.street && !h.city && !h.district && !h.state && !h.postcode).slice(0, 20);
       if (needs.length === 0) return;
       const entries = await Promise.all(
@@ -225,7 +231,7 @@ export default function Hospitals() {
         <View style={styles.locationRow}>
           <Ionicons name="location" size={16} color={colors.textLight} />
           <Text style={styles.locationText}>
-            Your location: {userAddress || `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`}
+            Your location: {userAddress || 'Current Location'}
           </Text>
         </View>
       ) : null}

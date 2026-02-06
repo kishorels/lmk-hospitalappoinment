@@ -9,7 +9,7 @@ import { useData, Appointment } from '../../src/context/DataContext';
 import { Card, Badge, Button } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 
-type FilterType = 'all' | 'pending' | 'accepted' | 'rejected' | 'completed';
+type FilterType = 'all' | 'pending' | 'accepted' | 'paid' | 'rejected' | 'completed';
 
 export default function DoctorAppointments() {
     const router = useRouter();
@@ -55,7 +55,7 @@ export default function DoctorAppointments() {
         return appointments.filter((a: Appointment) => a.status === filter);
     }, [appointments, filter]);
 
-    const handleStatusUpdate = useCallback(async (appointmentId: string, status: 'accepted' | 'rejected') => {
+    const handleStatusUpdate = useCallback(async (appointmentId: string, status: 'accepted' | 'rejected' | 'completed') => {
         if (status === 'rejected') {
             setSelectedAptId(appointmentId);
             setRescheduleModalVisible(true);
@@ -69,6 +69,34 @@ export default function DoctorAppointments() {
             Alert.alert('Error', 'Failed to update appointment status');
         }
     }, [updateAppointmentStatus]);
+
+    // ... lines 73-164 ...
+
+
+
+    // ... keyExtractor ...
+
+    // ... render return ...
+    // Note: I am NOT replacing the whole render return, just the helper functions and renderAppointment usage.
+    // However, I need to be careful with the Replace tool. It works on blocks.
+
+    // I will target the block from handleStatusUpdate down to renderAppointment.
+    // But that includes a lot of unchanged code.
+
+    // Let's do multiple replacements.
+    // 1. handleStatusUpdate
+    // 2. renderAppointment and callbacks
+    // 3. AppointmentCard component definition and return.
+
+    // I will start with handleStatusUpdate signature change.
+    // Actually, I can replace the whole functional component body if I am careful.
+    // Or just chunks.
+
+    // Chunk 1: handleStatusUpdate
+    // Chunk 2: handleComplete + renderAppointment
+    // Chunk 3: AppointmentCard props and JSX
+    // Chunk 4: Styles
+
 
     const handleRescheduleSubmit = async () => {
         if (!selectedAptId) return;
@@ -145,7 +173,8 @@ export default function DoctorAppointments() {
     const getStatusVariant = useCallback((status: Appointment['status']) => {
         switch (status) {
             case 'pending': return 'warning';
-            case 'accepted': return 'success';
+            case 'accepted': return 'warning';
+            case 'paid': return 'success';
             case 'rejected': return 'error';
             case 'completed': return 'info';
             default: return 'default';
@@ -156,22 +185,34 @@ export default function DoctorAppointments() {
         { label: 'All', value: 'all' },
         { label: 'Pending', value: 'pending' },
         { label: 'Accepted', value: 'accepted' },
+        { label: 'Paid', value: 'paid' },
         { label: 'Rejected', value: 'rejected' },
         { label: 'Completed', value: 'completed' },
     ];
 
     const handleAccept = useCallback((id: string) => handleStatusUpdate(id, 'accepted'), [handleStatusUpdate]);
     const handleReject = useCallback((id: string) => handleStatusUpdate(id, 'rejected'), [handleStatusUpdate]);
+    const handleComplete = useCallback((id: string) => {
+        Alert.alert(
+            'Complete Appointment',
+            'Are you sure you want to mark this appointment as completed?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Yes, Complete', onPress: () => handleStatusUpdate(id, 'completed') }
+            ]
+        );
+    }, [handleStatusUpdate]);
 
     const renderAppointment = useCallback(({ item }: { item: Appointment }) => (
         <AppointmentCard
             item={item}
             onAccept={handleAccept}
             onReject={handleReject}
+            onComplete={handleComplete}
             onOpenRecord={openRecordModal}
             getStatusVariant={getStatusVariant}
         />
-    ), [handleAccept, handleReject, openRecordModal, getStatusVariant]);
+    ), [handleAccept, handleReject, handleComplete, openRecordModal, getStatusVariant]);
 
     const keyExtractor = useCallback((item: Appointment) => item.id, []);
 
@@ -377,21 +418,36 @@ const AppointmentCard = React.memo(({
     item,
     onAccept,
     onReject,
+    onComplete,
     onOpenRecord,
     getStatusVariant,
 }: {
     item: Appointment;
     onAccept: (id: string) => void;
     onReject: (id: string) => void;
+    onComplete: (id: string) => void;
     onOpenRecord: (appointment: Appointment) => void;
     getStatusVariant: (status: Appointment['status']) => 'success' | 'warning' | 'error' | 'info' | 'default';
 }) => {
     const router = useRouter();
+
+    // Get display label for status
+    const getStatusLabel = (status: Appointment['status']) => {
+        switch (status) {
+            case 'accepted': return 'AWAITING PAYMENT';
+            case 'paid': return 'PAID';
+            default: return status.toUpperCase();
+        }
+    };
+
     return (
         <Card style={styles.appointmentCard}>
             <View style={styles.cardHeader}>
-                <Badge text={item.status.toUpperCase()} variant={getStatusVariant(item.status)} />
+                <Badge text={getStatusLabel(item.status)} variant={getStatusVariant(item.status)} />
                 <Badge text={item.type === 'video' ? 'Video' : 'In-Person'} variant="info" />
+                {item.payment_status === 'paid' && (
+                    <Badge text={`₹${item.payment_amount || 0}`} variant="success" />
+                )}
             </View>
 
             <View style={styles.patientRow}>
@@ -427,27 +483,45 @@ const AppointmentCard = React.memo(({
                     </TouchableOpacity>
                 </View>
             )}
-            {(item.status === 'accepted' || item.status === 'completed') && (
-                <View style={styles.cardFooterActions}>
-                    {item.type === 'video' && item.status === 'accepted' && (
-                        <TouchableOpacity
-                            style={[styles.actionBtn, styles.joinBtn]}
-                            onPress={() => router.push({
-                                pathname: '/video-call',
-                                params: {
-                                    appointmentId: item.id,
-                                    patientName: item.user_name,
-                                }
-                            })}
-                        >
-                            <Ionicons name="videocam" size={20} color="#FFF" />
-                            <Text style={styles.actionBtnText}>Join Call</Text>
+
+            {/* Show waiting for payment message when accepted but not paid */}
+            {item.status === 'accepted' && (
+                <View style={styles.waitingPaymentContainer}>
+                    <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
+                    <Text style={styles.waitingPaymentText}>Waiting for patient payment</Text>
+                </View>
+            )}
+
+            {/* Show actions only when paid or completed */}
+            {(item.status === 'paid' || item.status === 'completed') && (
+                <View style={[styles.cardFooterActions, { flexDirection: 'column' }]}>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        {item.type === 'video' && item.status === 'paid' && (
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.joinBtn]}
+                                onPress={() => router.push({
+                                    pathname: '/video-call',
+                                    params: {
+                                        appointmentId: item.id,
+                                        patientName: item.user_name,
+                                    }
+                                })}
+                            >
+                                <Ionicons name="videocam" size={20} color="#FFF" />
+                                <Text style={styles.actionBtnText}>Join Call</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={styles.recordBtn} onPress={() => onOpenRecord(item)}>
+                            <Ionicons name="document-text" size={18} color="#FFF" />
+                            <Text style={styles.recordBtnText}>Add Record</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {item.status === 'paid' && (
+                        <TouchableOpacity style={styles.completeBtn} onPress={() => onComplete(item.id)}>
+                            <Text style={styles.completeBtnText}>Mark as Completed</Text>
                         </TouchableOpacity>
                     )}
-                    <TouchableOpacity style={styles.recordBtn} onPress={() => onOpenRecord(item)}>
-                        <Ionicons name="document-text" size={18} color="#FFF" />
-                        <Text style={styles.recordBtnText}>Add Record</Text>
-                    </TouchableOpacity>
                 </View>
             )}
         </Card>
@@ -531,4 +605,8 @@ const styles = StyleSheet.create({
     quickBtnActive: { backgroundColor: colors.doctorPrimary, borderColor: colors.doctorPrimary },
     quickBtnText: { fontSize: 12, color: colors.textSecondary },
     quickBtnTextActive: { color: '#FFF' },
+    waitingPaymentContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.background, padding: 12, borderRadius: 10, marginTop: 12 },
+    waitingPaymentText: { fontSize: 13, color: colors.textSecondary },
+    completeBtn: { marginTop: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary, alignItems: 'center' },
+    completeBtnText: { color: colors.primary, fontWeight: '600' },
 });

@@ -115,7 +115,7 @@ export default function Booking() {
         Alert.alert(
           'Booking Successful',
           `Your appointment with ${doctor.name} has been scheduled for ${format(selectedDate, 'MMM d')} at ${selectedTime}.`,
-          [{ text: 'View Appointments', onPress: () => router.replace('/(user)/appointments') }]
+          [{ text: 'View Appointments', onPress: () => router.replace('/(user)/user-appointments') }]
         );
       } else {
         throw new Error('Booking failed');

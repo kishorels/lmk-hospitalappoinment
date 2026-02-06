@@ -17,6 +17,7 @@ export default function RootLayout() {
             <Stack.Screen name="(user)" />
             <Stack.Screen name="(doctor)" />
             <Stack.Screen name="(hospital)" />
+            <Stack.Screen name="video-call" options={{ presentation: 'fullScreenModal' }} />
           </Stack>
         </DataProvider>
       </AuthProvider>

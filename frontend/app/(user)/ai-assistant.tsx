@@ -172,7 +172,7 @@ export default function AIHealthAssistant() {
                         </View>
                         <Text style={styles.secondaryTitle}>Health Tips</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryCard} onPress={() => router.push('/(user)/appointments')}>
+                    <TouchableOpacity style={styles.secondaryCard} onPress={() => router.push('/(user)/user-appointments')}>
                         <View style={[styles.secondaryIcon, { backgroundColor: colors.info + '20' }]}>
                             <Ionicons name="calendar" size={24} color={colors.info} />
                         </View>

@@ -60,7 +60,10 @@ export interface Appointment {
   time_slot: string;
   type: 'in-person' | 'video';
   reason?: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'completed';
+  status: 'pending' | 'accepted' | 'paid' | 'rejected' | 'completed';
+  payment_status?: 'unpaid' | 'paid';
+  payment_amount?: number;
+  payment_date?: string;
   suggested_date?: string;
   suggested_time?: string;
   doctor_note?: string;
@@ -116,6 +119,7 @@ interface DataContextType {
   getUserAppointments: (userId: string) => Promise<void>;
   getDoctorAppointments: (doctorId: string) => Promise<void>;
   updateAppointmentStatus: (id: string, status: string, suggestion?: { date?: string; time?: string; note?: string }) => Promise<boolean>;
+  processPayment: (appointmentId: string, userId: string, amount: number) => Promise<Appointment | null>;
   updateAppointmentRecord: (id: string, data: {
     doctor_id: string;
     patient_complaint?: string;
@@ -324,6 +328,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const getDoctorsForHospital = async (hospitalId: string) => {
     if (!hospitalId) return [];
+    // Return cached data if available
+    if (hospitalDoctors[hospitalId]) {
+      return hospitalDoctors[hospitalId];
+    }
     try {
       const response = await fetch(`${BACKEND_URL}/api/hospital-doctors/${hospitalId}`);
       if (response.ok) {
@@ -429,6 +437,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return false;
   };
 
+  const processPayment = async (appointmentId: string, userId: string, amount: number): Promise<Appointment | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/appointments/${appointmentId}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          amount: amount,
+        }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setAppointments(prev => prev.map(a => a.id === appointmentId ? updated : a));
+        return updated;
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+    }
+    return null;
+  };
+
+
   const searchDoctors = (query: string) => {
     const lowerQuery = query.toLowerCase();
     return doctors.filter(d =>
@@ -499,6 +529,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       getUserAppointments,
       getDoctorAppointments,
       updateAppointmentStatus,
+      processPayment,
       searchDoctors,
       getDoctorsBySpecialization,
       updateDoctor,
