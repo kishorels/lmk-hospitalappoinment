@@ -28,7 +28,7 @@ export default function Booking() {
   );
   const [selectedTime, setSelectedTime] = useState<string | null>(preselectTime || null);
   const [bookingLoading, setBookingLoading] = useState(false);
-  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([]);
+  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number; locality?: string; city?: string; street?: string }[]>([]);
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,7 +204,7 @@ export default function Booking() {
                     <View style={styles.hospitalSelectInfo}>
                       <Text style={[styles.hospitalSelectName, isSelected && styles.hospitalSelectNameActive]}>{hospital.name}</Text>
                       <Text style={styles.hospitalSelectCoords}>
-                        {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                        {[hospital.locality, hospital.city].filter(Boolean).join(', ') || hospital.street || 'View map for location'}
                       </Text>
                     </View>
                     {isSelected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}

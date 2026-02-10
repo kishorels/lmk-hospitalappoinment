@@ -19,7 +19,7 @@ export default function DoctorDetail() {
   const [reviewText, setReviewText] = useState('');
   const [rating, setRating] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([]);
+  const [doctorHospitalsList, setDoctorHospitalsList] = useState<{ id: string; name: string; latitude: number; longitude: number; locality?: string; city?: string; street?: string }[]>([]);
   const [mapHospital, setMapHospital] = useState<{ id: string; name: string; latitude: number; longitude: number } | null>(null);
 
   const doctor = getDoctorById(id!);
@@ -157,7 +157,7 @@ export default function DoctorDetail() {
                     <View style={styles.hospitalInfo}>
                       <Text style={styles.hospitalName}>{h.name}</Text>
                       <Text style={styles.hospitalAddress}>
-                        {h.latitude.toFixed(4)}, {h.longitude.toFixed(4)}
+                        {[h.locality, h.city].filter(Boolean).join(', ') || h.street || 'View on map'}
                       </Text>
                     </View>
                     <TouchableOpacity

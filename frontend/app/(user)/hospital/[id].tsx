@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,89 +70,96 @@ export default function HospitalDetail() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Details</Text>
-          <View style={{ width: 44 }} />
-        </View>
-
-        {/* Hospital Profile */}
-        <View style={styles.profileSection}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="business-outline" size={60} color={colors.primary} />
-          </View>
-          <Text style={styles.hospitalName}>{hospital.name}</Text>
-          <View style={styles.locationBadge}>
-            <Ionicons name="location-outline" size={14} color={colors.primary} />
-            <Text style={styles.locationText}>{hospital.area}, {hospital.city}</Text>
-          </View>
-        </View>
-
-        {/* Details Grid */}
-        <View style={styles.detailsGrid}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Departments</Text>
-            <Text style={styles.detailValue}>{hospital.departments.length}</Text>
-          </View>
-          <View style={styles.detailDivider} />
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Rating</Text>
-            <Text style={styles.detailValue}>{hospital.rating?.toFixed(1) || '4.0'}</Text>
-          </View>
-        </View>
-
-        {/* Contact Info */}
-        <Card style={styles.contactCard}>
-          <View style={styles.contactRow}>
-            <View style={styles.contactIcon}>
-              <Ionicons name="call-outline" size={20} color={colors.primary} />
+      <FlatList
+        data={hospitalDoctors}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => renderDoctorCard(item)}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Details</Text>
+              <View style={{ width: 44 }} />
             </View>
-            <Text style={styles.contactText}>{hospital.phone || 'Contact Private'}</Text>
-          </View>
-          <View style={[styles.contactRow, { marginTop: 16 }]}>
-            <View style={styles.contactIcon}>
-              <Ionicons name="mail-outline" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.contactText}>{hospital.email}</Text>
-          </View>
-          <View style={[styles.contactRow, { marginTop: 16, alignItems: 'flex-start' }]}>
-            <View style={styles.contactIcon}>
-              <Ionicons name="map-outline" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.contactText}>{hospital.address}</Text>
-          </View>
-        </Card>
 
-        {/* Departments List */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Departments</Text>
-          <View style={styles.deptsContainer}>
-            {hospital.departments.map((dept, index) => (
-              <View key={index} style={styles.deptChip}>
-                <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
-                <Text style={styles.deptText}>{dept}</Text>
+            {/* Hospital Profile */}
+            <View style={styles.profileSection}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="business-outline" size={60} color={colors.primary} />
               </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Medical Staff */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Staff ({hospitalDoctors.length})</Text>
-          {hospitalDoctors.length > 0 ? (
-            hospitalDoctors.map(renderDoctorCard)
-          ) : (
-            <View style={styles.emptyCard}>
-              <Ionicons name="people-outline" size={40} color={colors.textLight} />
-              <Text style={styles.emptyText}>No doctors currently listed at this facility</Text>
+              <Text style={styles.hospitalName}>{hospital.name}</Text>
+              <View style={styles.locationBadge}>
+                <Ionicons name="location-outline" size={14} color={colors.primary} />
+                <Text style={styles.locationText}>{hospital.area}, {hospital.city}</Text>
+              </View>
             </View>
-          )}
-        </View>
-      </ScrollView>
+
+            {/* Details Grid */}
+            <View style={styles.detailsGrid}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Departments</Text>
+                <Text style={styles.detailValue}>{hospital.departments.length}</Text>
+              </View>
+              <View style={styles.detailDivider} />
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Rating</Text>
+                <Text style={styles.detailValue}>{hospital.rating?.toFixed(1) || '4.0'}</Text>
+              </View>
+            </View>
+
+            {/* Contact Info */}
+            <Card style={styles.contactCard}>
+              <View style={styles.contactRow}>
+                <View style={styles.contactIcon}>
+                  <Ionicons name="call-outline" size={20} color={colors.primary} />
+                </View>
+                <Text style={styles.contactText}>{hospital.phone || 'Contact Private'}</Text>
+              </View>
+              <View style={[styles.contactRow, { marginTop: 16 }]}>
+                <View style={styles.contactIcon}>
+                  <Ionicons name="mail-outline" size={20} color={colors.primary} />
+                </View>
+                <Text style={styles.contactText}>{hospital.email}</Text>
+              </View>
+              <View style={[styles.contactRow, { marginTop: 16, alignItems: 'flex-start' }]}>
+                <View style={styles.contactIcon}>
+                  <Ionicons name="map-outline" size={20} color={colors.primary} />
+                </View>
+                <Text style={styles.contactText}>{hospital.address}</Text>
+              </View>
+            </Card>
+
+            {/* Departments List */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Departments</Text>
+              <View style={styles.deptsContainer}>
+                {hospital.departments.map((dept, index) => (
+                  <View key={index} style={styles.deptChip}>
+                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
+                    <Text style={styles.deptText}>{dept}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Medical Staff Title */}
+            <View style={[styles.section, { paddingBottom: 16 }]}>
+              <Text style={styles.sectionTitle}>Medical Staff ({hospitalDoctors.length})</Text>
+            </View>
+          </>
+        }
+        ListEmptyComponent={
+          <View style={[styles.emptyCard, { marginHorizontal: 20 }]}>
+            <Ionicons name="people-outline" size={40} color={colors.textLight} />
+            <Text style={styles.emptyText}>No doctors currently listed at this facility</Text>
+          </View>
+        }
+        contentContainerStyle={{ paddingBottom: 40 }}
+      />
     </SafeAreaView>
   );
 }

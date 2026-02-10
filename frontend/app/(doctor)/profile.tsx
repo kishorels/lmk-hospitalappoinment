@@ -33,38 +33,65 @@ export default function DoctorProfile() {
         getOsmHospitals();
     }, []);
 
+    const filteredHospitals = useMemo(() => {
+        const q = hospitalSearch.trim().toLowerCase().replace(/\s+/g, '');
+        if (!q) return osmHospitals;
+        return osmHospitals.filter(h => {
+            const name = (h.name || '').toLowerCase().replace(/\s+/g, '');
+            const locality = (h.locality || '').toLowerCase().replace(/\s+/g, '');
+            const city = (h.city || '').toLowerCase().replace(/\s+/g, '');
+            return name.includes(q) || locality.includes(q) || city.includes(q);
+        });
+    }, [hospitalSearch, osmHospitals]);
+
     useEffect(() => {
-        if (!showHospitalModal) return;
-        if (osmHospitals.length === 0) return;
         let cancelled = false;
-        const run = async () => {
-            const missing = osmHospitals.filter(h => !resolvedAddresses[h.id]).slice(0, 30);
-            if (missing.length === 0) return;
+
+        const fetchAddresses = async () => {
+            // 1. Identify which IDs need resolution
+            const neededIds = new Set<string>();
+
+            // Always need selected hospitals
+            selectedHospitalIds.forEach(id => {
+                if (!resolvedAddresses[id]) neededIds.add(id);
+            });
+
+            // If modal is open, need visible hospitals (limit to first 50 of filtered results)
+            if (showHospitalModal) {
+                filteredHospitals.filter(h => !resolvedAddresses[h.id]).slice(0, 50).forEach(h => neededIds.add(h.id));
+            }
+
+            const idsToFetch = Array.from(neededIds); // Fetch all needed at once
+            if (idsToFetch.length === 0) return;
+
             const entries = await Promise.all(
-                missing.map(async (h) => {
+                idsToFetch.map(async (id) => {
                     try {
-                        const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/osm-hospitals/${h.id}/reverse`);
+                        const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/osm-hospitals/${id}/reverse`);
                         if (res.ok) {
                             const data = await res.json();
-                            return [h.id, data] as const;
+                            return [id, data] as const;
                         }
                     } catch { }
-                    return [h.id, null] as const;
+                    return [id, { locality: 'Location unavailable', city: '' }] as const; // Fallback to prevent retry loop
                 })
             );
+
             if (!cancelled) {
                 const next: Record<string, any> = {};
                 for (const [id, data] of entries) {
-                    if (data) next[id] = data;
+                    next[id] = data;
                 }
-                if (Object.keys(next).length > 0) {
-                    setResolvedAddresses(prev => ({ ...prev, ...next }));
-                }
+                setResolvedAddresses(prev => ({ ...prev, ...next }));
             }
         };
-        run();
+
+        if (selectedHospitalIds.length > 0 || showHospitalModal) {
+            fetchAddresses();
+        }
+
         return () => { cancelled = true; };
-    }, [showHospitalModal, osmHospitals, resolvedAddresses]);
+    }, [showHospitalModal, filteredHospitals, selectedHospitalIds, resolvedAddresses]);
 
     useEffect(() => {
         if (!doctorProfile?.id) return;
@@ -78,7 +105,7 @@ export default function DoctorProfile() {
     useEffect(() => {
         if (!doctorProfile?.id) return;
         const existing = doctorHospitals[doctorProfile.id];
-        if (existing && existing.length > 0) {
+        if (existing) {
             setSelectedHospitalIds(existing.map(h => h.id));
         }
     }, [doctorHospitals, doctorProfile?.id]);
@@ -123,12 +150,30 @@ export default function DoctorProfile() {
         });
     };
 
+    const handleRemoveHospital = async (hospitalId: string) => {
+        if (!doctorProfile?.id) return;
+
+        // Optimistically update local state
+        const newIds = selectedHospitalIds.filter(id => id !== hospitalId);
+        setSelectedHospitalIds(newIds);
+
+        const success = await saveDoctorHospitals(doctorProfile.id, newIds);
+        if (!success) {
+            Alert.alert('Error', 'Failed to remove hospital. Please try again.');
+            // Revert state if failed (optional, but good practice)
+            setSelectedHospitalIds(prev => [...prev, hospitalId]);
+        }
+    };
+
     const handleSaveHospitals = async () => {
         if (!doctorProfile?.id) return;
-        if (selectedHospitalIds.length === 0) {
-            Alert.alert('Select Hospitals', 'Please select at least one hospital.');
-            return;
-        }
+        // Allow saving empty list if they want to clear all? 
+        // The original code prevented saving empty list.
+        // if (selectedHospitalIds.length === 0) { ... }
+        // The user says "remove ... not come again", implies they want to remove.
+        // If they remove ALL, maybe they want to clear it. 
+        // But handleSaveHospitals is for the MODAL.
+
         setIsSavingHospitals(true);
         const success = await saveDoctorHospitals(doctorProfile.id, selectedHospitalIds);
         setIsSavingHospitals(false);
@@ -170,17 +215,6 @@ export default function DoctorProfile() {
         }
     }, [osmHospitals.length, getOsmHospitals]);
 
-    const filteredHospitals = useMemo(() => {
-        const q = hospitalSearch.trim().toLowerCase().replace(/\s+/g, '');
-        if (!q) return osmHospitals;
-        return osmHospitals.filter(h => {
-            const name = (h.name || '').toLowerCase().replace(/\s+/g, '');
-            const locality = (h.locality || '').toLowerCase().replace(/\s+/g, '');
-            const city = (h.city || '').toLowerCase().replace(/\s+/g, '');
-            return name.includes(q) || locality.includes(q) || city.includes(q);
-        });
-    }, [hospitalSearch, osmHospitals]);
-
     const renderHospitalItem = ({ item: hospital }: { item: OSMHospital }) => {
         const isSelected = selectedHospitalIds.includes(hospital.id);
         const address = resolvedAddresses[hospital.id];
@@ -200,7 +234,7 @@ export default function DoctorProfile() {
                         </Text>
                     ) : (
                         <Text style={styles.hospitalSelectCoords}>
-                            {hospital.latitude.toFixed(4)}, {hospital.longitude.toFixed(4)}
+                            View map for location
                         </Text>
                     )}
                 </View>
@@ -358,12 +392,12 @@ export default function DoctorProfile() {
                                             <Text style={styles.hospitalAddress}>
                                                 {address
                                                     ? [address.locality, address.city, address.district, address.state, address.postcode].filter(Boolean).join(', ')
-                                                    : `${hospital.latitude.toFixed(4)}, ${hospital.longitude.toFixed(4)}`}
+                                                    : 'View map for location'}
                                             </Text>
                                         </View>
                                         <TouchableOpacity
                                             style={styles.removeHospitalBtn}
-                                            onPress={() => toggleHospitalSelection(hospital.id)}
+                                            onPress={() => handleRemoveHospital(hospital.id)}
                                         >
                                             <Ionicons name="close-circle" size={20} color={colors.error} />
                                         </TouchableOpacity>
@@ -416,6 +450,7 @@ export default function DoctorProfile() {
                                 data={filteredHospitals}
                                 keyExtractor={(item) => item.id}
                                 renderItem={renderHospitalItem}
+                                extraData={resolvedAddresses}
                                 style={styles.hospitalList}
                                 contentContainerStyle={filteredHospitals.length === 0 ? styles.emptyHospitals : undefined}
                                 ListEmptyComponent={
